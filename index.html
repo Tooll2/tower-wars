@@ -52,7 +52,20 @@
       </div>
 
       <div class="controls-group">
-        <button id="btn-multiplayer" class="btn-mp">🌐 Создать / Войти в комнату</button>
+        <div class="speed-voting-widget">
+          <span class="speed-widget-label">Скорость:</span>
+          <div class="speed-btn-group">
+            <button class="speed-btn active" data-speed="1">1x</button>
+            <button class="speed-btn" data-speed="2">2x</button>
+            <button class="speed-btn" data-speed="4">4x</button>
+          </div>
+          <div class="speed-status-box">
+            <span class="effective-speed-text">Итог: <b id="effective-speed-val">1x</b></span>
+            <span class="opponent-speed-text">Соперник: <b id="opponent-speed-val">1x</b></span>
+          </div>
+        </div>
+
+        <button id="btn-multiplayer" class="btn-mp">🌐 Комната</button>
       </div>
     </header>
 

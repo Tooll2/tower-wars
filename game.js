@@ -51,6 +51,8 @@ class TowerWarsGame {
     this.pathfinder = new PathFinder(this.width, this.height);
     this.sound = new SoundFx();
 
+    this.mySpeedVote = 1;
+    this.enemySpeedVote = 1;
     this.gameSpeed = 1.0;
     this.gameTimeSeconds = 0;
     this.lastTimestamp = 0;
@@ -111,6 +113,14 @@ class TowerWarsGame {
     document.getElementById('mp-modal').classList.remove('hidden');
 
     requestAnimationFrame(this.gameLoop.bind(this));
+  }
+
+  recalculateEffectiveSpeed() {
+    this.gameSpeed = Math.min(this.mySpeedVote, this.enemySpeedVote);
+    const effElem = document.getElementById('effective-speed-val');
+    const oppElem = document.getElementById('opponent-speed-val');
+    if (effElem) effElem.innerText = `${this.gameSpeed}x`;
+    if (oppElem) oppElem.innerText = `${this.enemySpeedVote}x`;
   }
 
   clearBuildSelection() {
@@ -1280,6 +1290,13 @@ class TowerWarsGame {
         this.updateHUD();
         break;
       }
+
+      case 'SPEED_VOTE': {
+        this.enemySpeedVote = Number(data.payload.speed) || 1;
+        this.recalculateEffectiveSpeed();
+        this.logEvent(`⚡ Соперник выбрал скорость ${this.enemySpeedVote}x (Итоговая: ${this.gameSpeed}x)`, 'log-income');
+        break;
+      }
     }
   }
 
@@ -1417,6 +1434,10 @@ class TowerWarsGame {
     this.sound.crit();
     this.logEvent(`🌐 ПОДКЛЮЧЕНО! Начался реальный PvP 1v1 матч по сети!`, 'log-kill');
     this.updateHUD();
+    this.recalculateEffectiveSpeed();
+
+    // Sync initial speed choice
+    this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
   }
 
   bindEvents() {
@@ -1485,6 +1506,19 @@ class TowerWarsGame {
         document.getElementById('card-details').innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
         document.getElementById('card-actions').style.display = 'none';
       }
+    });
+
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.mySpeedVote = Number(btn.dataset.speed);
+        this.recalculateEffectiveSpeed();
+        this.logEvent(`⚡ Вы выбрали скорость ${this.mySpeedVote}x (Итоговая скорость игры: ${this.gameSpeed}x)`, 'log-income');
+        if (this.isMultiplayer) {
+          this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+        }
+      });
     });
 
     const overlayRestartBtn = document.getElementById('overlay-btn-restart');
