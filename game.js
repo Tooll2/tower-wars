@@ -194,6 +194,32 @@ class TowerWarsGame {
     this.updateHUD();
   }
 
+  tryUnlockCreative(password) {
+    this.sound.init();
+    const clean = (password || '').trim().toLowerCase();
+    const valid = ['melafon', 'мелафон', 'melofon', 'мелофон', 'miofon', 'миофон', 'mielophone'];
+    const statusMsg = document.getElementById('melafon-status-msg');
+
+    if (valid.includes(clean)) {
+      if (statusMsg) {
+        statusMsg.innerText = '✅ Доступ разрешен! Запуск Melafon...';
+        statusMsg.style.color = '#10b981';
+      }
+      this.startCreativeMode();
+    } else {
+      this.sound.leak();
+      if (statusMsg) {
+        statusMsg.innerText = '❌ Неверный пароль (введите: melafon)';
+        statusMsg.style.color = '#ef4444';
+      }
+      const inp = document.getElementById('melafon-input');
+      if (inp) {
+        inp.style.borderColor = '#ef4444';
+        setTimeout(() => { if (inp) inp.style.borderColor = ''; }, 1500);
+      }
+    }
+  }
+
   clampCamera() {
     if (this.camera.zoom <= 1.0) {
       this.camera.zoom = 1.0;
@@ -2233,31 +2259,40 @@ class TowerWarsGame {
       });
     }
 
-    // Creative Mode ("Мелофон") Button Listeners with Password Prompt
-    const handleCreativePasswordPrompt = () => {
-      this.sound.init();
-      const pwd = window.prompt('Введите секретный пароль для активации Креативного режима:');
-      if (pwd === null) return;
-      const clean = pwd.trim().toLowerCase();
-      if (clean === 'melafon' || clean === 'мелафон' || clean === 'мелофон' || clean === 'melofon') {
-        this.startCreativeMode();
-      } else {
-        this.sound.leak();
-        window.alert('❌ Неверный пароль! Доступ запрещен.');
-      }
-    };
-
+    // Creative Mode ("Melafon") Listeners
     const btnCreative = document.getElementById('btn-creative-mode');
-    if (btnCreative) {
-      btnCreative.addEventListener('click', handleCreativePasswordPrompt);
-    }
-
     const mpBtnCreative = document.getElementById('mp-btn-creative-mode');
-    if (mpBtnCreative) {
-      mpBtnCreative.addEventListener('click', handleCreativePasswordPrompt);
+    const melafonInput = document.getElementById('melafon-input');
+
+    if (btnCreative) {
+      btnCreative.addEventListener('click', () => {
+        this.sound.init();
+        if (this.isCreativeMode) return;
+        const modal = document.getElementById('mp-modal');
+        if (modal) modal.classList.remove('hidden');
+        if (melafonInput) {
+          melafonInput.focus();
+          melafonInput.select();
+        }
+      });
     }
 
-    // Secret Word Keyboard Listener ("melafon" / "мелафон" / "мелофон" / "melofon")
+    if (mpBtnCreative) {
+      mpBtnCreative.addEventListener('click', () => {
+        const val = melafonInput ? melafonInput.value : '';
+        this.tryUnlockCreative(val);
+      });
+    }
+
+    if (melafonInput) {
+      melafonInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          this.tryUnlockCreative(melafonInput.value);
+        }
+      });
+    }
+
+    // Secret Word Keyboard Listener ("melafon" / "мелафон" / "melofon" / "miofon")
     window.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (e.key && e.key.length === 1) {
@@ -2265,8 +2300,10 @@ class TowerWarsGame {
         if (
           this.secretCodeBuffer.includes('melafon') ||
           this.secretCodeBuffer.includes('мелафон') ||
+          this.secretCodeBuffer.includes('melofon') ||
           this.secretCodeBuffer.includes('мелофон') ||
-          this.secretCodeBuffer.includes('melofon')
+          this.secretCodeBuffer.includes('miofon') ||
+          this.secretCodeBuffer.includes('миофон')
         ) {
           this.secretCodeBuffer = '';
           this.startCreativeMode();

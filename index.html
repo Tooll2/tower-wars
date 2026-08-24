@@ -174,9 +174,13 @@
 
               <!-- Creative Mode Direct Entry -->
               <div class="mp-creative-divider">
-                <span>или</span>
+                <span>или режим песочницы (Melafon)</span>
               </div>
-              <button id="mp-btn-creative-mode" class="btn-creative-full">🧪 Одиночный режим: Melafon (Креатив)</button>
+              <div class="mp-input-group">
+                <input type="text" id="melafon-input" placeholder="Введите пароль (melafon)" maxlength="20" autocomplete="off">
+                <button id="mp-btn-creative-mode" class="btn-creative-full" style="width: auto; white-space: nowrap; padding: 0 16px;">🧪 Войти</button>
+              </div>
+              <p id="melafon-status-msg" class="mp-status-msg"></p>
             </div>
           </div>
         </div>
