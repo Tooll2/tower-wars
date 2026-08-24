@@ -122,6 +122,8 @@ class TowerWarsGame {
     this.mouseGridPos = { x: -1, y: -1 };
     this.isHoveringCanvas = false;
     this.isMatchActive = false;
+    this.isCreativeMode = false;
+    this.secretCodeBuffer = '';
 
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
@@ -141,6 +143,55 @@ class TowerWarsGame {
     if (modal) modal.classList.remove('hidden');
 
     this.startEngine();
+  }
+
+  startCreativeMode() {
+    this.isCreativeMode = true;
+    this.isMultiplayer = false;
+    this.isHost = true;
+    this.isMatchActive = true;
+    this.isGameOver = false;
+    this.gameTimeSeconds = 0;
+
+    // Infinite resources for creative sandbox
+    this.player.gold = 999999999;
+    this.player.income = 999999;
+    this.player.lives = 999;
+    this.player.tier = 3;
+
+    this.enemy.gold = 999999999;
+    this.enemy.income = 999999;
+    this.enemy.lives = 999;
+    this.enemy.tier = 3;
+
+    this.initCreepSlots(this.player);
+    this.initCreepSlots(this.enemy);
+
+    this.recalculateCreepPaths(this.player);
+    this.recalculateCreepPaths(this.enemy);
+
+    const modal = document.getElementById('mp-modal');
+    if (modal) modal.classList.add('hidden');
+
+    const overlay = document.getElementById('canvas-overlay-msg');
+    if (overlay) overlay.classList.add('hidden');
+
+    const modeBadge = document.getElementById('game-mode-badge');
+    if (modeBadge) {
+      modeBadge.innerText = '🧪 Креатив: «Мелофон»';
+      modeBadge.style.background = '#8b5cf6';
+      modeBadge.style.color = '#fff';
+    }
+
+    const btnCreative = document.getElementById('btn-creative-mode');
+    if (btnCreative) {
+      btnCreative.classList.add('active');
+      btnCreative.innerText = '✅ Мелофон (Вкл)';
+    }
+
+    this.sound.upgrade();
+    this.logEvent('🧪 Креативный режим «Мелофон» активирован! Бесконечные деньги для строительства лабиринта.', 'log-income');
+    this.updateHUD();
   }
 
   clampCamera() {
@@ -249,9 +300,10 @@ class TowerWarsGame {
   }
 
   placeTower(agent, gx, gy, towerDef, deductCost = true, notifyNet = true) {
-    if (deductCost) {
+    if (!this.canPlaceTower(agent, gx, gy)) return false;
+
+    if (deductCost && !this.isCreativeMode) {
       if (agent.gold < towerDef.cost) return false;
-      if (!this.canPlaceTower(agent, gx, gy)) return false;
       agent.gold -= towerDef.cost;
     }
 
@@ -1429,12 +1481,14 @@ class TowerWarsGame {
     const nextDef = BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId);
     if (!nextDef) return;
 
-    if (this.player.gold < instance.def.upgradeCost) {
-      this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${instance.def.upgradeCost})!`, 'log-leak');
-      return;
+    if (!this.isCreativeMode) {
+      if (this.player.gold < instance.def.upgradeCost) {
+        this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${instance.def.upgradeCost})!`, 'log-leak');
+        return;
+      }
+      this.player.gold -= instance.def.upgradeCost;
     }
 
-    this.player.gold -= instance.def.upgradeCost;
     instance.def = nextDef;
     this.sound.build();
     this.logEvent(`⬆️ Башня улучшена до «${nextDef.name}»!`, 'log-income');
@@ -1478,16 +1532,46 @@ class TowerWarsGame {
 
   updateHUD() {
     const goldElem = document.getElementById('player-gold');
-    if (goldElem) goldElem.innerText = Math.floor(this.player.gold);
+    if (goldElem) goldElem.innerText = this.isCreativeMode ? '∞' : Math.floor(this.player.gold);
 
     const incElem = document.getElementById('player-income');
-    if (incElem) incElem.innerText = `+${this.player.income}`;
+    if (incElem) incElem.innerText = this.isCreativeMode ? '+∞' : `+${this.player.income}`;
 
     const livesElem = document.getElementById('player-lives');
-    if (livesElem) livesElem.innerText = `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    if (livesElem) livesElem.innerText = this.isCreativeMode ? '∞' : `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
 
     const enemyLivesElem = document.getElementById('enemy-lives');
-    if (enemyLivesElem) enemyLivesElem.innerText = `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    if (enemyLivesElem) enemyLivesElem.innerText = this.isCreativeMode ? '∞' : `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+
+    // Update Path Length Metric Badge (Bottom-Right Corner)
+    const agent = this.activeLane === 'player' ? this.player : this.enemy;
+    const baseLen = (agent.guidePath && agent.guidePath.length > 0) ? agent.guidePath.length : 0;
+    const pathValElem = document.getElementById('path-cells-val');
+    const pathDiffElem = document.getElementById('path-diff-val');
+
+    if (pathValElem) {
+      pathValElem.innerText = `${baseLen} кл.`;
+    }
+
+    if (pathDiffElem) {
+      if (this.activeLane === 'player' && this.hoverPreviewGuidePath && this.selectedTowerToBuild) {
+        const previewLen = this.hoverPreviewGuidePath.length;
+        const diff = previewLen - baseLen;
+        if (diff > 0) {
+          pathDiffElem.innerText = `➜ ${previewLen} (+${diff})`;
+          pathDiffElem.className = 'path-diff diff-positive';
+        } else if (diff < 0) {
+          pathDiffElem.innerText = `➜ ${previewLen} (${diff})`;
+          pathDiffElem.className = 'path-diff diff-negative';
+        } else {
+          pathDiffElem.innerText = '';
+          pathDiffElem.className = 'path-diff';
+        }
+      } else {
+        pathDiffElem.innerText = '';
+        pathDiffElem.className = 'path-diff';
+      }
+    }
 
     this.renderCreepButtons();
   }
@@ -2012,9 +2096,11 @@ class TowerWarsGame {
           } else {
             this.hoverPreviewGuidePath = null;
           }
+          this.updateHUD();
         }
-      } else {
+      } else if (this.hoverPreviewGuidePath !== null) {
         this.hoverPreviewGuidePath = null;
+        this.updateHUD();
       }
     });
 
@@ -2023,6 +2109,7 @@ class TowerWarsGame {
       this.hoverPreviewGuidePath = null;
       this.lastHoverGx = -1;
       this.lastHoverGy = -1;
+      this.updateHUD();
     });
 
     this.canvas.addEventListener('contextmenu', (e) => {
@@ -2145,6 +2232,35 @@ class TowerWarsGame {
         if (battleLog) battleLog.innerHTML = '';
       });
     }
+
+    // Creative Mode ("Мелофон") Button Listeners
+    const btnCreative = document.getElementById('btn-creative-mode');
+    if (btnCreative) {
+      btnCreative.addEventListener('click', () => {
+        this.sound.init();
+        this.startCreativeMode();
+      });
+    }
+
+    const mpBtnCreative = document.getElementById('mp-btn-creative-mode');
+    if (mpBtnCreative) {
+      mpBtnCreative.addEventListener('click', () => {
+        this.sound.init();
+        this.startCreativeMode();
+      });
+    }
+
+    // Secret Word Keyboard Listener ("мелофон" / "melofon")
+    window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return;
+      if (e.key && e.key.length === 1) {
+        this.secretCodeBuffer = (this.secretCodeBuffer + e.key.toLowerCase()).slice(-10);
+        if (this.secretCodeBuffer.includes('мелофон') || this.secretCodeBuffer.includes('melofon')) {
+          this.secretCodeBuffer = '';
+          this.startCreativeMode();
+        }
+      }
+    });
   }
 }
 

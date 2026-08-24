@@ -536,6 +536,118 @@ button {
   object-fit: contain;
 }
 
+/* BOTTOM RIGHT HUD GROUP */
+.bottom-right-hud-group {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 15;
+}
+
+.path-length-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  user-select: none;
+}
+
+.path-length-badge .path-val {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.path-length-badge .path-diff {
+  font-weight: 700;
+  font-size: 0.76rem;
+}
+
+.path-diff.diff-positive {
+  color: #10b981;
+}
+
+.path-diff.diff-negative {
+  color: #ef4444;
+}
+
+.creative-mode-btn {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border: 1px solid #a78bfa;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.creative-mode-btn:hover {
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.7);
+  transform: translateY(-1px);
+}
+
+.creative-mode-btn.active {
+  background: #10b981;
+  border-color: #34d399;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.5);
+}
+
+.mp-creative-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 14px 0 10px 0;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.mp-creative-divider::before,
+.mp-creative-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #334155;
+}
+
+.mp-creative-divider span {
+  padding: 0 10px;
+}
+
+.btn-creative-full {
+  width: 100%;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  border: 1px solid #a78bfa;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.4);
+  transition: all 0.2s ease;
+}
+
+.btn-creative-full:hover {
+  background: linear-gradient(135deg, #a78bfa, #818cf8);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.7);
+  transform: translateY(-1px);
+}
+
 .canvas-toolbar {
   display: flex;
   justify-content: space-between;

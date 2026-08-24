@@ -111,6 +111,17 @@
         <div class="canvas-wrapper">
           <canvas id="game-canvas" width="840" height="792"></canvas>
           
+          <!-- Bottom-Right Controls: Path Length Metric & Creative Mode Button -->
+          <div class="bottom-right-hud-group">
+            <div id="path-length-badge" class="path-length-badge">
+              <span class="path-icon">🗺</span>
+              <span class="path-label">Длина пути:</span>
+              <span id="path-cells-val" class="path-val">204 кл.</span>
+              <span id="path-diff-val" class="path-diff"></span>
+            </div>
+            <button id="btn-creative-mode" class="creative-mode-btn" title="Активировать креативный режим без ожидания соперника (бесконечные деньги)">🧪 Мелофон</button>
+          </div>
+
           <!-- Victory / Defeat Overlay -->
           <div id="canvas-overlay-msg" class="overlay-msg hidden">
             <div class="msg-box">
@@ -160,6 +171,12 @@
                 </div>
                 <p id="mp-join-status" class="mp-status-msg"></p>
               </div>
+
+              <!-- Creative Mode Direct Entry -->
+              <div class="mp-creative-divider">
+                <span>или</span>
+              </div>
+              <button id="mp-btn-creative-mode" class="btn-creative-full">🧪 Одиночный режим: «Мелофон» (Креатив)</button>
             </div>
           </div>
         </div>
