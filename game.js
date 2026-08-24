@@ -3343,9 +3343,61 @@ class TowerWarsGame {
       }
     });
 
-    // Keyboard Shortcuts: Ctrl+Z (Undo), Escape, R (Rotate Block), Creep Spawning Hotkeys (1..3, Q..E, A..D, Z..C)
+    // Keyboard Shortcuts: Delete (Sell Tower), Ctrl+Z (Undo), Escape, R (Rotate Block), Creep Spawning Hotkeys
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+      // 0. Delete / Del / Backspace: Sell selected tower or remove hovered tower / wall
+      if (e.key === 'Delete' || e.key === 'Del' || e.key === 'Backspace') {
+        if (this.selectedEntity) {
+          e.preventDefault();
+          this.sellSelectedTower(this.selectedEntity);
+          return;
+        }
+
+        // If no tower is currently selected in inspector card, check tower under mouse cursor!
+        if (this.activeLane === 'player') {
+          const gx = this.mouseGridPos.x;
+          const gy = this.mouseGridPos.y;
+
+          // Check if hovering a tower (2x2 search around cursor)
+          const hoveredTower = (this.player.grid[gy] && this.player.grid[gy][gx])
+            || (this.player.grid[gy + 1] && this.player.grid[gy + 1][gx])
+            || (this.player.grid[gy] && this.player.grid[gy][gx + 1])
+            || (this.player.grid[gy + 1] && this.player.grid[gy + 1][gx + 1]);
+
+          if (hoveredTower) {
+            e.preventDefault();
+            this.sellSelectedTower(hoveredTower);
+            return;
+          }
+
+          // Check if hovering a custom wall block
+          if (this.placedCustomWalls && this.placedCustomWalls.length > 0) {
+            const clickedWallIdx = this.placedCustomWalls.findIndex(w => {
+              const rects = this.getBlockSubRects(w);
+              return rects.some(r => gx >= r.x && gx < r.x + r.w && gy >= r.y && gy < r.y + r.h);
+            });
+
+            if (clickedWallIdx !== -1) {
+              e.preventDefault();
+              const removedWall = this.placedCustomWalls.splice(clickedWallIdx, 1)[0];
+              const origBlock = (this.myCustomBlocks || []).find(b => b.instanceId === removedWall.instanceId);
+              if (origBlock) origBlock.placed = false;
+              this.sound.coin();
+              this.logEvent(`↩️ Удален блок стены: ${removedWall.name}`, 'log-income');
+              this.recalculateCreepPaths(this.player);
+              this.renderTowerSelector();
+              this.updateHUD();
+
+              if (this.isMultiplayer) {
+                this.sendNetAction('CUSTOM_WALL_SYNC', { walls: this.placedCustomWalls });
+              }
+              return;
+            }
+          }
+        }
+      }
 
       // Rotate Custom Block on 'R' / 'К'
       if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') {
