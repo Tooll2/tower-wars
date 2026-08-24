@@ -788,6 +788,50 @@ class TowerWarsGame {
     }));
   }
 
+  getBlockSubRects(block, gx, gy) {
+    const baseGx = (gx !== undefined) ? gx : block.x;
+    const baseGy = (gy !== undefined) ? gy : block.y;
+    if (block.subBlocks && block.subBlocks.length > 0) {
+      return block.subBlocks.map(s => ({
+        x: baseGx + s.dx,
+        y: baseGy + s.dy,
+        w: s.w,
+        h: s.h
+      }));
+    }
+    return [{
+      x: baseGx,
+      y: baseGy,
+      w: block.w,
+      h: block.h
+    }];
+  }
+
+  rotateBlock(block) {
+    if (!block) return;
+    const oldW = block.w;
+    const oldH = block.h;
+    const newW = oldH;
+    const newH = oldW;
+    const oldSubs = (block.subBlocks && block.subBlocks.length > 0)
+      ? block.subBlocks
+      : [{ dx: 0, dy: 0, w: oldW, h: oldH }];
+
+    const newSubs = oldSubs.map(s => ({
+      dx: oldH - (s.dy + s.h),
+      dy: s.dx,
+      w: s.h,
+      h: s.w
+    }));
+
+    block.w = newW;
+    block.h = newH;
+    block.subBlocks = newSubs;
+    this.sound.click();
+    this.logEvent(`🔄 Блок «${block.name}» повернут (${block.w}×${block.h})`, 'log-income');
+    this.renderTowerSelector();
+  }
+
   isPermanentWall(x, y) {
     let walls = (this.activeMap && this.activeMap.walls) ? [...this.activeMap.walls] : [];
     if (this.placedCustomWalls && this.placedCustomWalls.length > 0) {
@@ -799,9 +843,13 @@ class TowerWarsGame {
     if (walls.length === 0 && (!this.activeMap || !this.activeMap.isCustom)) {
       walls = [BALANCE.MAP.MIDDLE_WALL];
     }
+
     for (const wall of walls) {
-      if (x >= wall.x && x < wall.x + wall.w && y >= wall.y && y < wall.y + wall.h) {
-        return true;
+      const rects = this.getBlockSubRects(wall);
+      for (const r of rects) {
+        if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+          return true;
+        }
       }
     }
     return false;
@@ -809,38 +857,47 @@ class TowerWarsGame {
 
   canPlaceCustomWall(gx, gy, block) {
     if (!block) return false;
-    const bw = block.w;
-    const bh = block.h;
-    if (gx < 0 || gx + bw > this.width || gy < 0 || gy + bh > this.height) return false;
+    const blockRects = this.getBlockSubRects(block, gx, gy);
+
+    // Check bounds for each sub-rect
+    for (const r of blockRects) {
+      if (r.x < 0 || r.x + r.w > this.width || r.y < 0 || r.y + r.h > this.height) return false;
+    }
 
     // Check collision with no-build zones (Spawn, WP1, WP2, Base)
     const zones = (this.activeMap && this.activeMap.zones) ? this.activeMap.zones : [];
-    for (let cy = gy; cy < gy + bh; cy++) {
-      for (let cx = gx; cx < gx + bw; cx++) {
-        for (const z of zones) {
-          if (cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h) {
+    for (const r of blockRects) {
+      for (let cy = r.y; cy < r.y + r.h; cy++) {
+        for (let cx = r.x; cx < r.x + r.w; cx++) {
+          for (const z of zones) {
+            if (cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h) {
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    // Check collision with already placed custom walls (by sub-rects!)
+    for (const pw of this.placedCustomWalls) {
+      if (pw.instanceId === block.instanceId) continue;
+      const pwRects = this.getBlockSubRects(pw);
+      for (const r1 of blockRects) {
+        for (const r2 of pwRects) {
+          if (!(r1.x + r1.w <= r2.x || r1.x >= r2.x + r2.w || r1.y + r1.h <= r2.y || r1.y >= r2.y + r2.h)) {
             return false;
           }
         }
       }
     }
 
-    // Check collision with already placed custom walls
-    for (const pw of this.placedCustomWalls) {
-      if (pw.instanceId === block.instanceId) continue;
-      if (!(gx + bw <= pw.x || gx >= pw.x + pw.w || gy + bh <= pw.y || gy >= pw.y + pw.h)) {
-        return false;
-      }
-    }
-
-    // A* Path validation: Simulated path with this block placed
-    const simulatedWalls = [...this.placedCustomWalls, { x: gx, y: gy, w: bw, h: bh }];
+    // A* Path validation: Simulated path with this block's sub-rects placed
     const isSimBlocked = (x, y) => {
       if (x < 0 || x >= this.width || y < 0 || y >= this.height) return true;
-      for (const w of simulatedWalls) {
-        if (x >= w.x && x < w.x + w.w && y >= w.y && y < w.y + w.h) return true;
+      for (const r of blockRects) {
+        if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return true;
       }
-      return false;
+      return this.isPermanentWall(x, y);
     };
 
     const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
@@ -863,7 +920,8 @@ class TowerWarsGame {
       x: gx,
       y: gy,
       w: block.w,
-      h: block.h
+      h: block.h,
+      subBlocks: block.subBlocks ? JSON.parse(JSON.stringify(block.subBlocks)) : null
     };
 
     this.placedCustomWalls.push(wallObj);
@@ -872,7 +930,7 @@ class TowerWarsGame {
     this.canvas.style.cursor = 'default';
 
     this.sound.build();
-    this.logEvent(`🧱 Установлен блок для соперника: ${block.name}`, 'log-income');
+    this.logEvent(`🧱 Установлен блок: ${block.name}`, 'log-income');
 
     this.recalculateCreepPaths(this.player);
     this.renderTowerSelector();
@@ -1624,21 +1682,24 @@ class TowerWarsGame {
     }
 
     for (const mw of walls) {
-      ctx.fillStyle = '#161f30';
-      ctx.fillRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
+      const rects = this.getBlockSubRects(mw);
+      for (const r of rects) {
+        ctx.fillStyle = '#161f30';
+        ctx.fillRect(r.x * cs, r.y * cs, r.w * cs, r.h * cs);
 
-      // Diagonal texture stripes on the wall
-      ctx.strokeStyle = '#24344d';
-      ctx.lineWidth = 3;
-      for (let d = -mw.h * cs; d < mw.w * cs; d += 18) {
-        ctx.beginPath();
-        ctx.moveTo(mw.x * cs + Math.max(0, d), mw.y * cs + Math.max(0, -d));
-        ctx.lineTo(mw.x * cs + Math.min(mw.w * cs, d + mw.h * cs), mw.y * cs + Math.min(mw.h * cs, -d + mw.w * cs));
-        ctx.stroke();
+        // Diagonal texture stripes on each sub-wall
+        ctx.strokeStyle = '#24344d';
+        ctx.lineWidth = 3;
+        for (let d = -r.h * cs; d < r.w * cs; d += 18) {
+          ctx.beginPath();
+          ctx.moveTo(r.x * cs + Math.max(0, d), r.y * cs + Math.max(0, -d));
+          ctx.lineTo(r.x * cs + Math.min(r.w * cs, d + r.h * cs), r.y * cs + Math.min(r.h * cs, -d + r.w * cs));
+          ctx.stroke();
+        }
+        ctx.strokeStyle = (this.activeMap && this.activeMap.isCustom) ? '#f97316' : '#475569';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(r.x * cs, r.y * cs, r.w * cs, r.h * cs);
       }
-      ctx.strokeStyle = (this.activeMap && this.activeMap.isCustom) ? '#f97316' : '#475569';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
     }
 
     // 4. Vibrant Waypoint Portals for Active Map
@@ -1874,29 +1935,40 @@ class TowerWarsGame {
       }
     }
 
-    // Custom Wall Block Ghost Preview during Architect Phase
+    // Custom Wall Block Ghost Preview during Architect Phase (Centered on mouse cursor)
     if (this.selectedCustomBlock && this.activeLane === 'player') {
-      const gx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, this.mouseGridPos.x));
-      const gy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, this.mouseGridPos.y));
+      const cursorCenterX = (this.selectedCustomBlock.w * this.cellSize) / 2;
+      const cursorCenterY = (this.selectedCustomBlock.h * this.cellSize) / 2;
+      const gx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, Math.round((this.mouseGridPos.x * cs - cursorCenterX) / cs)));
+      const gy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, Math.round((this.mouseGridPos.y * cs - cursorCenterY) / cs)));
       const canPlace = this.canPlaceCustomWall(gx, gy, this.selectedCustomBlock);
+
+      const blockRects = this.getBlockSubRects(this.selectedCustomBlock, gx, gy);
+
+      for (const r of blockRects) {
+        const rx = r.x * cs;
+        const ry = r.y * cs;
+        const rw = r.w * cs;
+        const rh = r.h * cs;
+
+        ctx.fillStyle = canPlace ? 'rgba(249, 115, 22, 0.45)' : 'rgba(239, 68, 68, 0.45)';
+        ctx.fillRect(rx, ry, rw, rh);
+
+        ctx.strokeStyle = canPlace ? '#f97316' : '#ef4444';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(rx, ry, rw, rh);
+      }
 
       const bx = gx * cs;
       const by = gy * cs;
       const bw = this.selectedCustomBlock.w * cs;
       const bh = this.selectedCustomBlock.h * cs;
 
-      ctx.fillStyle = canPlace ? 'rgba(249, 115, 22, 0.35)' : 'rgba(239, 68, 68, 0.4)';
-      ctx.fillRect(bx, by, bw, bh);
-
-      ctx.strokeStyle = canPlace ? '#f97316' : '#ef4444';
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(bx, by, bw, bh);
-
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${this.selectedCustomBlock.name} (${this.selectedCustomBlock.w}×${this.selectedCustomBlock.h})`, bx + bw / 2, by + bh / 2);
+      ctx.fillText(`${this.selectedCustomBlock.name} [ПКМ/R: Поворот]`, bx + bw / 2, by + bh / 2);
     }
 
     ctx.restore();
@@ -3061,10 +3133,12 @@ class TowerWarsGame {
       if (e.button === 0 && this.activeLane === 'player') {
         const { mx, my } = this.getCanvasMousePos(e, true);
 
-        // Custom Architect Block Placement
+        // Custom Architect Block Placement (Centered on mouse cursor)
         if (this.selectedCustomBlock) {
-          const buildGx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, Math.floor(mx / this.cellSize)));
-          const buildGy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, Math.floor(my / this.cellSize)));
+          const cursorCenterX = (this.selectedCustomBlock.w * this.cellSize) / 2;
+          const cursorCenterY = (this.selectedCustomBlock.h * this.cellSize) / 2;
+          const buildGx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, Math.round((mx - cursorCenterX) / this.cellSize)));
+          const buildGy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, Math.round((my - cursorCenterY) / this.cellSize)));
           this.placeCustomWall(buildGx, buildGy, this.selectedCustomBlock);
           return;
         }
@@ -3223,19 +3297,22 @@ class TowerWarsGame {
       }
       this.sound.init();
 
-      // Architect mode: Right click to cancel block selection or remove clicked placed custom wall
-      if (this.gameState === 'PREPARATION' && this.activeMap && this.activeMap.isCustom) {
-        if (this.selectedCustomBlock !== null) {
-          this.selectedCustomBlock = null;
-          this.canvas.style.cursor = 'default';
-          this.renderTowerSelector();
-          return;
-        }
+      // 1. When a custom block is selected to place, Right Click ROTATES the block!
+      if (this.selectedCustomBlock !== null) {
+        this.rotateBlock(this.selectedCustomBlock);
+        return;
+      }
 
+      // 2. When NOT holding a block, right-clicking an existing custom wall removes it
+      if (this.placedCustomWalls && this.placedCustomWalls.length > 0) {
         const { mx, my } = this.getCanvasMousePos(e, true);
         const gx = Math.floor(mx / this.cellSize);
         const gy = Math.floor(my / this.cellSize);
-        const clickedWallIdx = this.placedCustomWalls.findIndex(w => gx >= w.x && gx < w.x + w.w && gy >= w.y && gy < w.y + w.h);
+
+        const clickedWallIdx = this.placedCustomWalls.findIndex(w => {
+          const rects = this.getBlockSubRects(w);
+          return rects.some(r => gx >= r.x && gx < r.x + r.w && gy >= r.y && gy < r.y + r.h);
+        });
 
         if (clickedWallIdx !== -1) {
           const removedWall = this.placedCustomWalls.splice(clickedWallIdx, 1)[0];
@@ -3266,9 +3343,18 @@ class TowerWarsGame {
       }
     });
 
-    // Keyboard Shortcuts: Ctrl+Z (Undo), Escape, Creep Spawning Hotkeys (1..3, Q..E, A..D, Z..C)
+    // Keyboard Shortcuts: Ctrl+Z (Undo), Escape, R (Rotate Block), Creep Spawning Hotkeys (1..3, Q..E, A..D, Z..C)
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+      // Rotate Custom Block on 'R' / 'К'
+      if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') {
+        if (this.selectedCustomBlock !== null) {
+          e.preventDefault();
+          this.rotateBlock(this.selectedCustomBlock);
+          return;
+        }
+      }
 
       // 1. Ctrl + Z (Undo last tower build action / stroke)
       if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'я' || e.key === 'Я')) {
@@ -3277,8 +3363,14 @@ class TowerWarsGame {
         return;
       }
 
-      // 2. Escape: Cancel tower placement / selection / zoom
+      // 2. Escape: Cancel block/tower placement / selection / zoom
       if (e.key === 'Escape') {
+        if (this.selectedCustomBlock !== null) {
+          this.selectedCustomBlock = null;
+          this.canvas.style.cursor = 'default';
+          this.renderTowerSelector();
+          return;
+        }
         if (this.camera.zoom > 1.01) {
           this.camera.zoom = 1.0;
           this.camera.x = 0;
