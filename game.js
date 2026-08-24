@@ -1,6 +1,6 @@
 /**
- * Shango Tower Wars - Pure 1v1 PvP Real-Time Multiplayer
- * Synchronized via Global MQTT over WebSockets
+ * Shango Tower Wars - Complete 1v1 Real-Time Multiplayer Engine
+ * Fully Synchronized via Global MQTT WebSockets
  */
 
 class SoundFx {
@@ -95,7 +95,8 @@ class TowerWarsGame {
     this.particles = [];
     this.floatingTexts = [];
 
-    this.selectedTowerToBuild = null;
+    // Pre-select first tower ("Базовая вышка") so players can build immediately!
+    this.selectedTowerToBuild = BALANCE.TOWERS[0];
     this.selectedEntity = null;
     this.mouseGridPos = { x: -1, y: -1 };
     this.isHoveringCanvas = false;
@@ -106,11 +107,13 @@ class TowerWarsGame {
     this.initUI();
     this.bindEvents();
     this.initMultiplayerUI();
+    this.recalculateEffectiveSpeed();
 
     this.logEvent("⚔️ Онлайн 1v1 PvP режим готов. Создайте комнату или введите код соперника!", "log-spawn");
 
-    // Automatically open room modal on startup for instant match setup
-    document.getElementById('mp-modal').classList.remove('hidden');
+    // Open room modal on startup
+    const modal = document.getElementById('mp-modal');
+    if (modal) modal.classList.remove('hidden');
 
     requestAnimationFrame(this.gameLoop.bind(this));
   }
@@ -130,7 +133,7 @@ class TowerWarsGame {
   }
 
   initCreepSlots(agent) {
-    const tierData = BALANCE.CREEPS_BY_TIER[agent.tier];
+    const tierData = BALANCE.CREEPS_BY_TIER[agent.tier] || BALANCE.CREEPS_BY_TIER[1];
     agent.creepSlots = tierData.map((creepDef, idx) => ({
       index: idx,
       def: creepDef,
@@ -398,10 +401,13 @@ class TowerWarsGame {
       this.triggerGameOver(true);
     }
 
-    document.getElementById('income-timer').innerText = `${Math.ceil(this.incomeTimer)}s`;
+    const timerElem = document.getElementById('income-timer');
+    if (timerElem) timerElem.innerText = `${Math.ceil(this.incomeTimer)}s`;
+
     const mins = Math.floor(this.gameTimeSeconds / 60).toString().padStart(2, '0');
     const secs = Math.floor(this.gameTimeSeconds % 60).toString().padStart(2, '0');
-    document.getElementById('game-time').innerText = `${mins}:${secs}`;
+    const gameTimeElem = document.getElementById('game-time');
+    if (gameTimeElem) gameTimeElem.innerText = `${mins}:${secs}`;
   }
 
   updateCreepSlots(agent, dt) {
@@ -701,7 +707,6 @@ class TowerWarsGame {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // 2. High-Contrast Grid (1x1 Cells and 2x2 Tower Borders)
-    // 1x1 Cell Lines
     ctx.strokeStyle = '#1a273f';
     ctx.lineWidth = 1;
     for (let x = 0; x <= this.width; x++) {
@@ -809,6 +814,7 @@ class TowerWarsGame {
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // 6. Towers
     for (const tower of agent.towers) {
       const tx = tower.x * cs;
       const ty = tower.y * cs;
@@ -851,6 +857,7 @@ class TowerWarsGame {
       ctx.stroke();
     }
 
+    // 7. Creeps
     for (const creep of agent.creeps) {
       const cx = (creep.x + 0.5) * cs;
       const cy = (creep.y + 0.5) * cs;
@@ -880,6 +887,7 @@ class TowerWarsGame {
       ctx.fillRect(barX, barY, barW * hpPercent, barH);
     }
 
+    // 8. Projectiles
     for (const p of this.projectiles) {
       if (p.lane !== this.activeLane) continue;
       const px = p.x * cs;
@@ -891,6 +899,7 @@ class TowerWarsGame {
       ctx.fill();
     }
 
+    // 9. Particles
     for (const pt of this.particles) {
       ctx.fillStyle = pt.color;
       ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
@@ -900,6 +909,7 @@ class TowerWarsGame {
       ctx.globalAlpha = 1.0;
     }
 
+    // 10. Floating Texts
     for (const ft of this.floatingTexts) {
       ctx.fillStyle = ft.color;
       ctx.font = `bold ${Math.round(11 * ft.scale)}px JetBrains Mono`;
@@ -909,6 +919,7 @@ class TowerWarsGame {
       ctx.globalAlpha = 1.0;
     }
 
+    // 11. Mouse Hover Box & Placement Ghost
     if (this.activeLane === 'player' && this.isHoveringCanvas) {
       const gx = this.mouseGridPos.x;
       const gy = this.mouseGridPos.y;
@@ -957,6 +968,7 @@ class TowerWarsGame {
 
   renderTowerSelector() {
     const list = document.getElementById('tower-selector-list');
+    if (!list) return;
     list.innerHTML = '';
 
     BALANCE.TOWERS.forEach((tower) => {
@@ -986,13 +998,19 @@ class TowerWarsGame {
 
       list.appendChild(btn);
     });
+
+    if (this.selectedTowerToBuild) {
+      this.showTowerInspectCard(this.selectedTowerToBuild);
+    }
   }
 
   renderCreepButtons() {
     const grid = document.getElementById('creep-buttons-grid');
+    if (!grid) return;
     grid.innerHTML = '';
 
-    document.getElementById('current-tier-badge').innerText = `ТИР ${this.player.tier}`;
+    const tierBadge = document.getElementById('current-tier-badge');
+    if (tierBadge) tierBadge.innerText = `ТИР ${this.player.tier}`;
 
     this.player.creepSlots.forEach((slot, idx) => {
       const btn = document.createElement('button');
@@ -1046,6 +1064,7 @@ class TowerWarsGame {
 
   showCreepHoverDetails(creepDef) {
     const box = document.getElementById('creep-hover-details');
+    if (!box) return;
     const reduction = Math.round(BALANCE.getArmorDamageReduction(creepDef.armor) * 100);
     const paybackTicks = creepDef.income > 0 ? Math.ceil(creepDef.cost / creepDef.income) : 'Штрафной крип';
     const bounty = creepDef.bounty !== undefined ? creepDef.bounty : (creepDef.income > 0 ? creepDef.income : Math.round(creepDef.cost * 0.075));
@@ -1062,11 +1081,14 @@ class TowerWarsGame {
   }
 
   showTowerInspectCard(towerDef, instance = null) {
-    document.getElementById('card-title').innerText = towerDef.name;
-    document.getElementById('card-type-tag').innerText = `Цена: 🪙${towerDef.cost}`;
+    const title = document.getElementById('card-title');
+    const tag = document.getElementById('card-type-tag');
+    if (title) title.innerText = towerDef.name;
+    if (tag) tag.innerText = `Цена: 🪙${towerDef.cost}`;
 
     const details = document.getElementById('card-details');
     const actions = document.getElementById('card-actions');
+    if (!details) return;
 
     let html = `
       <div class="stat-row"><span>Урон за выстрел:</span><span>${towerDef.damage} ед.</span></div>
@@ -1086,22 +1108,28 @@ class TowerWarsGame {
         <div class="stat-row"><span>Нанесено урона:</span><span>${instance.totalDamageDealt.toLocaleString()}</span></div>
         <div class="stat-row"><span>Убито крипов:</span><span>${instance.kills}</span></div>
       `;
-      actions.style.display = 'flex';
-      const upBtn = document.getElementById('btn-upgrade-tower');
-      if (towerDef.upgradeId) {
-        upBtn.style.display = 'block';
-        upBtn.innerText = `Апгрейд (🪙 ${towerDef.upgradeCost})`;
-        upBtn.onclick = () => this.upgradeSelectedTower(instance);
-      } else {
-        upBtn.style.display = 'none';
-      }
+      if (actions) {
+        actions.style.display = 'flex';
+        const upBtn = document.getElementById('btn-upgrade-tower');
+        if (upBtn) {
+          if (towerDef.upgradeId) {
+            upBtn.style.display = 'block';
+            upBtn.innerText = `Апгрейд (🪙 ${towerDef.upgradeCost})`;
+            upBtn.onclick = () => this.upgradeSelectedTower(instance);
+          } else {
+            upBtn.style.display = 'none';
+          }
+        }
 
-      const sellBtn = document.getElementById('btn-sell-tower');
-      const refund = Math.round(towerDef.cost * 0.75);
-      sellBtn.innerText = `Продать (+🪙 ${refund})`;
-      sellBtn.onclick = () => this.sellSelectedTower(instance);
+        const sellBtn = document.getElementById('btn-sell-tower');
+        if (sellBtn) {
+          const refund = Math.round(towerDef.cost * 0.75);
+          sellBtn.innerText = `Продать (+🪙 ${refund})`;
+          sellBtn.onclick = () => this.sellSelectedTower(instance);
+        }
+      }
     } else {
-      actions.style.display = 'none';
+      if (actions) actions.style.display = 'none';
     }
 
     details.innerHTML = html;
@@ -1152,21 +1180,32 @@ class TowerWarsGame {
       this.sendNetAction('SELL_TOWER', { gx: instance.x, gy: instance.y });
     }
 
-    document.getElementById('card-details').innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
-    document.getElementById('card-actions').style.display = 'none';
+    const details = document.getElementById('card-details');
+    if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
+    const actions = document.getElementById('card-actions');
+    if (actions) actions.style.display = 'none';
     this.updateHUD();
   }
 
   updateHUD() {
-    document.getElementById('player-gold').innerText = Math.floor(this.player.gold);
-    document.getElementById('player-income').innerText = `+${this.player.income}`;
-    document.getElementById('player-lives').innerText = `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
-    document.getElementById('enemy-lives').innerText = `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    const goldElem = document.getElementById('player-gold');
+    if (goldElem) goldElem.innerText = Math.floor(this.player.gold);
+
+    const incElem = document.getElementById('player-income');
+    if (incElem) incElem.innerText = `+${this.player.income}`;
+
+    const livesElem = document.getElementById('player-lives');
+    if (livesElem) livesElem.innerText = `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+
+    const enemyLivesElem = document.getElementById('enemy-lives');
+    if (enemyLivesElem) enemyLivesElem.innerText = `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+
     this.renderCreepButtons();
   }
 
   logEvent(msg, className = '') {
     const log = document.getElementById('battle-log');
+    if (!log) return;
     const entry = document.createElement('div');
     entry.className = `log-entry ${className}`;
     const time = Math.floor(this.gameTimeSeconds);
@@ -1182,15 +1221,22 @@ class TowerWarsGame {
     const title = document.getElementById('overlay-title');
     const desc = document.getElementById('overlay-desc');
 
-    overlay.classList.remove('hidden');
-    if (isVictory) {
-      title.innerText = '🏆 ПОБЕДА!';
-      title.style.color = '#10b981';
-      desc.innerText = `Вы победили соперника за ${Math.floor(this.gameTimeSeconds)} секунд!`;
-    } else {
-      title.innerText = '💀 ПОРАЖЕНИЕ!';
-      title.style.color = '#ef4444';
-      desc.innerText = 'Ваша база уничтожена!';
+    if (overlay) overlay.classList.remove('hidden');
+    if (title) {
+      if (isVictory) {
+        title.innerText = '🏆 ПОБЕДА!';
+        title.style.color = '#10b981';
+      } else {
+        title.innerText = '💀 ПОРАЖЕНИЕ!';
+        title.style.color = '#ef4444';
+      }
+    }
+    if (desc) {
+      if (isVictory) {
+        desc.innerText = `Вы победили соперника за ${Math.floor(this.gameTimeSeconds)} секунд!`;
+      } else {
+        desc.innerText = 'Ваша база уничтожена!';
+      }
     }
   }
 
@@ -1270,16 +1316,17 @@ class TowerWarsGame {
     switch (data.action) {
       case 'GUEST_JOINED': {
         if (this.isHost) {
-          // Host sends MATCH_START
           this.sendNetAction('MATCH_START', { hostId: this.myPlayerId });
-          document.getElementById('mp-modal').classList.add('hidden');
+          const modal = document.getElementById('mp-modal');
+          if (modal) modal.classList.add('hidden');
           this.startMultiplayerSession(true);
         }
         break;
       }
 
       case 'MATCH_START': {
-        document.getElementById('mp-modal').classList.add('hidden');
+        const modal = document.getElementById('mp-modal');
+        if (modal) modal.classList.add('hidden');
         this.startMultiplayerSession(false);
         break;
       }
@@ -1371,86 +1418,99 @@ class TowerWarsGame {
     const btnConnect = document.getElementById('mp-btn-connect');
     const joinStatus = document.getElementById('mp-join-status');
 
-    btnMp.addEventListener('click', () => {
-      this.sound.init();
-      modal.classList.remove('hidden');
-    });
+    if (btnMp && modal) {
+      btnMp.addEventListener('click', () => {
+        this.sound.init();
+        modal.classList.remove('hidden');
+      });
+    }
 
-    btnClose.addEventListener('click', () => {
-      modal.classList.add('hidden');
-    });
+    if (btnClose && modal) {
+      btnClose.addEventListener('click', () => {
+        modal.classList.add('hidden');
+      });
+    }
 
-    tabHost.addEventListener('click', () => {
-      tabHost.classList.add('active');
-      tabJoin.classList.remove('active');
-      viewHost.classList.remove('hidden');
-      viewJoin.classList.add('hidden');
-    });
+    if (tabHost && tabJoin && viewHost && viewJoin) {
+      tabHost.addEventListener('click', () => {
+        tabHost.classList.add('active');
+        tabJoin.classList.remove('active');
+        viewHost.classList.remove('hidden');
+        viewJoin.classList.add('hidden');
+      });
 
-    tabJoin.addEventListener('click', () => {
-      tabJoin.classList.add('active');
-      tabHost.classList.remove('active');
-      viewJoin.classList.remove('hidden');
-      viewHost.classList.add('hidden');
-    });
+      tabJoin.addEventListener('click', () => {
+        tabJoin.classList.add('active');
+        tabHost.classList.remove('active');
+        viewJoin.classList.remove('hidden');
+        viewHost.classList.add('hidden');
+      });
+    }
 
     // Create Room (Host)
-    btnCreateRoom.addEventListener('click', () => {
-      this.sound.init();
-      const code = String(Math.floor(1000 + Math.random() * 9000));
-      this.isHost = true;
+    if (btnCreateRoom) {
+      btnCreateRoom.addEventListener('click', () => {
+        this.sound.init();
+        const code = String(Math.floor(1000 + Math.random() * 9000));
+        this.isHost = true;
 
-      btnCreateRoom.style.display = 'none';
-      hostCodeBox.classList.remove('hidden');
-      hostCodeText.innerText = code;
-      hostStatus.innerText = 'Подключение к глобальной сети...';
+        btnCreateRoom.style.display = 'none';
+        if (hostCodeBox) hostCodeBox.classList.remove('hidden');
+        if (hostCodeText) hostCodeText.innerText = code;
+        if (hostStatus) hostStatus.innerText = 'Подключение к глобальной сети...';
 
-      this.connectMqttBroker(
-        code,
-        () => {
-          hostStatus.innerText = 'Комната готова! Ожидание входа второго игрока...';
-        },
-        (err) => {
-          hostStatus.innerText = 'Ошибка сети. Попробуйте еще раз.';
-          hostStatus.style.color = '#ef4444';
-        }
-      );
-    });
+        this.connectMqttBroker(
+          code,
+          () => {
+            if (hostStatus) hostStatus.innerText = 'Комната готова! Ожидание входа второго игрока...';
+          },
+          (err) => {
+            if (hostStatus) {
+              hostStatus.innerText = 'Ошибка сети. Попробуйте еще раз.';
+              hostStatus.style.color = '#ef4444';
+            }
+          }
+        );
+      });
+    }
 
-    btnCopyCode.addEventListener('click', () => {
-      const code = hostCodeText.innerText;
-      navigator.clipboard.writeText(code);
-      btnCopyCode.innerText = '✅ Скопировано!';
-      setTimeout(() => { btnCopyCode.innerText = '📋 Скопировать'; }, 2000);
-    });
+    if (btnCopyCode && hostCodeText) {
+      btnCopyCode.addEventListener('click', () => {
+        const code = hostCodeText.innerText;
+        navigator.clipboard.writeText(code);
+        btnCopyCode.innerText = '✅ Скопировано!';
+        setTimeout(() => { btnCopyCode.innerText = '📋 Скопировать'; }, 2000);
+      });
+    }
 
     // Join Room (Guest)
-    btnConnect.addEventListener('click', () => {
-      this.sound.init();
-      const code = joinInput.value.trim().replace(/[^0-9]/g, '');
-      if (code.length < 4) {
-        joinStatus.innerText = 'Введите 4-значный номер комнаты!';
-        joinStatus.style.color = '#ef4444';
-        return;
-      }
-
-      this.isHost = false;
-      joinStatus.innerText = 'Вход в комнату и поиск хоста...';
-      joinStatus.style.color = '#38bdf8';
-
-      this.connectMqttBroker(
-        code,
-        () => {
-          joinStatus.innerText = 'Связь установлена! Запуск матча...';
-          // Notify Host
-          this.sendNetAction('GUEST_JOINED', { guestId: this.myPlayerId });
-        },
-        (err) => {
-          joinStatus.innerText = 'Не удалось подключиться к комнате.';
+    if (btnConnect && joinInput && joinStatus) {
+      btnConnect.addEventListener('click', () => {
+        this.sound.init();
+        const code = joinInput.value.trim().replace(/[^0-9]/g, '');
+        if (code.length < 4) {
+          joinStatus.innerText = 'Введите 4-значный номер комнаты!';
           joinStatus.style.color = '#ef4444';
+          return;
         }
-      );
-    });
+
+        this.isHost = false;
+        joinStatus.innerText = 'Вход в комнату и поиск хоста...';
+        joinStatus.style.color = '#38bdf8';
+
+        this.connectMqttBroker(
+          code,
+          () => {
+            joinStatus.innerText = 'Связь установлена! Запуск матча...';
+            this.sendNetAction('GUEST_JOINED', { guestId: this.myPlayerId });
+          },
+          (err) => {
+            joinStatus.innerText = 'Не удалось подключиться к комнате.';
+            joinStatus.style.color = '#ef4444';
+          }
+        );
+      });
+    }
   }
 
   startMultiplayerSession(isHost) {
@@ -1477,10 +1537,15 @@ class TowerWarsGame {
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
 
-    document.getElementById('game-mode-badge').innerText = isHost ? '👑 1v1 PvP (Хост)' : '🎮 1v1 PvP (Клиент)';
-    document.getElementById('game-mode-badge').style.background = '#10b981';
-    document.getElementById('game-mode-badge').style.color = '#fff';
-    document.getElementById('enemy-label').innerText = 'БАЗА СОПЕРНИКА';
+    const modeBadge = document.getElementById('game-mode-badge');
+    if (modeBadge) {
+      modeBadge.innerText = isHost ? '👑 1v1 PvP (Хост)' : '🎮 1v1 PvP (Клиент)';
+      modeBadge.style.background = '#10b981';
+      modeBadge.style.color = '#fff';
+    }
+
+    const enemyLabel = document.getElementById('enemy-label');
+    if (enemyLabel) enemyLabel.innerText = 'БАЗА СОПЕРНИКА';
 
     this.sound.crit();
     this.logEvent(`🌐 ПОДКЛЮЧЕНО! Начался реальный PvP 1v1 матч по сети!`, 'log-kill');
@@ -1514,8 +1579,10 @@ class TowerWarsGame {
         this.clearBuildSelection();
       } else if (this.selectedEntity !== null) {
         this.selectedEntity = null;
-        document.getElementById('card-details').innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
-        document.getElementById('card-actions').style.display = 'none';
+        const details = document.getElementById('card-details');
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
+        const actions = document.getElementById('card-actions');
+        if (actions) actions.style.display = 'none';
       }
     });
 
@@ -1523,8 +1590,10 @@ class TowerWarsGame {
       if (e.key === 'Escape') {
         this.clearBuildSelection();
         this.selectedEntity = null;
-        document.getElementById('card-details').innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
-        document.getElementById('card-actions').style.display = 'none';
+        const details = document.getElementById('card-details');
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
+        const actions = document.getElementById('card-actions');
+        if (actions) actions.style.display = 'none';
       }
     });
 
@@ -1554,8 +1623,10 @@ class TowerWarsGame {
         }
       } else {
         this.selectedEntity = null;
-        document.getElementById('card-details').innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
-        document.getElementById('card-actions').style.display = 'none';
+        const details = document.getElementById('card-details');
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
+        const actions = document.getElementById('card-actions');
+        if (actions) actions.style.display = 'none';
       }
     });
 
@@ -1580,21 +1651,27 @@ class TowerWarsGame {
     const tabPlayer = document.getElementById('tab-player-lane');
     const tabEnemy = document.getElementById('tab-enemy-lane');
 
-    tabPlayer.addEventListener('click', () => {
-      this.activeLane = 'player';
-      tabPlayer.classList.add('active');
-      tabEnemy.classList.remove('active');
-    });
+    if (tabPlayer && tabEnemy) {
+      tabPlayer.addEventListener('click', () => {
+        this.activeLane = 'player';
+        tabPlayer.classList.add('active');
+        tabEnemy.classList.remove('active');
+      });
 
-    tabEnemy.addEventListener('click', () => {
-      this.activeLane = 'enemy';
-      tabEnemy.classList.add('active');
-      tabPlayer.classList.remove('active');
-    });
+      tabEnemy.addEventListener('click', () => {
+        this.activeLane = 'enemy';
+        tabEnemy.classList.add('active');
+        tabPlayer.classList.remove('active');
+      });
+    }
 
-    document.getElementById('btn-clear-log').addEventListener('click', () => {
-      document.getElementById('battle-log').innerHTML = '';
-    });
+    const clearLogBtn = document.getElementById('btn-clear-log');
+    if (clearLogBtn) {
+      clearLogBtn.addEventListener('click', () => {
+        const battleLog = document.getElementById('battle-log');
+        if (battleLog) battleLog.innerHTML = '';
+      });
+    }
   }
 }
 
