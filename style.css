@@ -643,6 +643,7 @@ button {
   position: relative;
   transition: all 0.15s ease;
   overflow: hidden;
+  user-select: none;
 }
 
 .creep-btn:hover:not(:disabled) {
@@ -652,40 +653,31 @@ button {
 }
 
 .creep-btn:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
-  filter: grayscale(0.8);
 }
 
-.creep-btn-icon {
-  font-size: 1.4rem;
+.creep-radial-cooldown {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(rgba(10, 15, 29, 0.85) var(--cd-angle, 0deg), transparent var(--cd-angle, 0deg));
+  z-index: 2;
 }
 
-.creep-btn-name {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
-}
-
-.creep-btn-meta {
+.creep-cd-timer-text {
+  position: absolute;
+  inset: 0;
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 3;
+  pointer-events: none;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.65rem;
-}
-
-.creep-btn-cost {
-  color: var(--gold);
-  font-weight: 700;
-}
-
-.creep-btn-income {
-  color: var(--income);
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: #fbbf24;
+  text-shadow: 0 0 6px #000, 0 0 10px #000;
 }
 
 .creep-charge-badge {
@@ -695,23 +687,16 @@ button {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.65rem;
   font-weight: 800;
-  background: #334155;
+  background: #1e293b;
   padding: 1px 4px;
   border-radius: 4px;
   color: #38bdf8;
+  z-index: 4;
 }
 
-.creep-cd-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.75);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: #f87171;
+.creep-charge-badge.ready {
+  background: #065f46;
+  color: #34d399;
 }
 
 .btn-tier-upgrade {

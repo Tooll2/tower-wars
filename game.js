@@ -395,6 +395,8 @@ class TowerWarsGame {
     this.updateParticles(dt);
     this.updateFloatingTexts(dt);
 
+    this.updateCreepUIRealtime();
+
     if (this.player.lives <= 0) {
       this.triggerGameOver(false);
     } else if (this.enemy.lives <= 0) {
@@ -919,42 +921,31 @@ class TowerWarsGame {
       ctx.globalAlpha = 1.0;
     }
 
-    // 11. Mouse Hover Box & Placement Ghost
-    if (this.activeLane === 'player' && this.isHoveringCanvas) {
+    // 11. Mouse Hover Placement Ghost (Only when a tower is selected!)
+    if (this.activeLane === 'player' && this.isHoveringCanvas && this.selectedTowerToBuild) {
       const gx = this.mouseGridPos.x;
       const gy = this.mouseGridPos.y;
 
-      if (gx >= 0 && gx < this.width && gy >= 0 && gy < this.height) {
-        if (this.selectedTowerToBuild) {
-          if (gx + 1 < this.width && gy + 1 < this.height) {
-            const canBuild = this.canPlaceTower(this.player, gx, gy);
-            const bx = gx * cs;
-            const by = gy * cs;
-            const bw = 2 * cs;
-            const bh = 2 * cs;
+      if (gx >= 0 && gx + 1 < this.width && gy >= 0 && gy + 1 < this.height) {
+        const canBuild = this.canPlaceTower(this.player, gx, gy);
+        const bx = gx * cs;
+        const by = gy * cs;
+        const bw = 2 * cs;
+        const bh = 2 * cs;
 
-            ctx.fillStyle = canBuild ? '#10b98144' : '#ef444455';
-            ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = canBuild ? '#10b98144' : '#ef444455';
+        ctx.fillRect(bx, by, bw, bh);
 
-            ctx.strokeStyle = canBuild ? '#10b981' : '#ef4444';
-            ctx.lineWidth = 2.5;
-            ctx.strokeRect(bx, by, bw, bh);
+        ctx.strokeStyle = canBuild ? '#10b981' : '#ef4444';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(bx, by, bw, bh);
 
-            ctx.strokeStyle = canBuild ? '#10b98188' : '#ef444488';
-            ctx.fillStyle = canBuild ? '#10b98118' : '#ef444418';
-            ctx.beginPath();
-            ctx.arc(bx + bw / 2, by + bh / 2, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          }
-        } else {
-          // Highlight cell under cursor
-          ctx.fillStyle = '#38bdf822';
-          ctx.fillRect(gx * cs, gy * cs, cs, cs);
-          ctx.strokeStyle = '#38bdf8aa';
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(gx * cs, gy * cs, cs, cs);
-        }
+        ctx.strokeStyle = canBuild ? '#10b98188' : '#ef444488';
+        ctx.fillStyle = canBuild ? '#10b98118' : '#ef444418';
+        ctx.beginPath();
+        ctx.arc(bx + bw / 2, by + bh / 2, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
     }
   }
@@ -1015,11 +1006,13 @@ class TowerWarsGame {
     this.player.creepSlots.forEach((slot, idx) => {
       const btn = document.createElement('button');
       btn.className = 'creep-btn';
-      btn.disabled = slot.initialCooldownRemaining > 0 || slot.charges <= 0 || this.player.gold < slot.def.cost;
+      btn.dataset.slot = String(idx);
 
       const incSign = slot.def.income >= 0 ? `+${slot.def.income}` : `${slot.def.income}`;
 
       btn.innerHTML = `
+        <div class="creep-radial-cooldown" style="--cd-angle: 0deg;"></div>
+        <div class="creep-cd-timer-text" style="display: none;"></div>
         <span class="creep-charge-badge">${slot.charges}/10</span>
         <span class="creep-btn-icon">${slot.def.icon}</span>
         <span class="creep-btn-name">${slot.def.name}</span>
@@ -1027,7 +1020,6 @@ class TowerWarsGame {
           <span class="creep-btn-cost">🪙${slot.def.cost}</span>
           <span class="creep-btn-income">${incSign}</span>
         </div>
-        ${slot.initialCooldownRemaining > 0 ? `<div class="creep-cd-overlay">⏱ ${Math.ceil(slot.initialCooldownRemaining)}s</div>` : ''}
       `;
 
       btn.addEventListener('mouseenter', () => this.showCreepHoverDetails(slot.def));
@@ -1060,6 +1052,68 @@ class TowerWarsGame {
       maxTierBadge.innerHTML = `<span>👑 Максимальный ТИР 3</span>`;
       grid.appendChild(maxTierBadge);
     }
+
+    this.updateCreepUIRealtime();
+  }
+
+  updateCreepUIRealtime() {
+    const buttons = document.querySelectorAll('.creep-btn[data-slot]');
+    buttons.forEach(btn => {
+      const idx = Number(btn.dataset.slot);
+      const slot = this.player.creepSlots[idx];
+      if (!slot) return;
+
+      const radial = btn.querySelector('.creep-radial-cooldown');
+      const timerText = btn.querySelector('.creep-cd-timer-text');
+      const badge = btn.querySelector('.creep-charge-badge');
+
+      const isAffordable = (this.player.gold >= slot.def.cost);
+
+      if (slot.initialCooldownRemaining > 0) {
+        // Initial Unlock Countdown (Clockwise Sweep)
+        const total = slot.def.initCd || 1;
+        const progress = Math.min(1, Math.max(0, slot.initialCooldownRemaining / total));
+        const angle = Math.round(progress * 360);
+        if (radial) radial.style.setProperty('--cd-angle', `${angle}deg`);
+        if (timerText) {
+          timerText.style.display = 'flex';
+          timerText.innerText = `${slot.initialCooldownRemaining.toFixed(1)}s`;
+        }
+        if (badge) {
+          badge.innerText = `0/10`;
+          badge.classList.remove('ready');
+        }
+        btn.disabled = true;
+      } else {
+        // Unlocked!
+        if (slot.charges === 0) {
+          // Accumulating first charge
+          const total = slot.def.stackInterval;
+          const remaining = total - slot.stackTimer;
+          const progress = Math.min(1, Math.max(0, remaining / total));
+          const angle = Math.round(progress * 360);
+          if (radial) radial.style.setProperty('--cd-angle', `${angle}deg`);
+          if (timerText) {
+            timerText.style.display = 'flex';
+            timerText.innerText = `${remaining.toFixed(1)}s`;
+          }
+          if (badge) {
+            badge.innerText = `0/10`;
+            badge.classList.remove('ready');
+          }
+          btn.disabled = true;
+        } else {
+          // Has 1..10 charges
+          if (radial) radial.style.setProperty('--cd-angle', `0deg`);
+          if (timerText) timerText.style.display = 'none';
+          if (badge) {
+            badge.innerText = `${slot.charges}/10`;
+            badge.classList.add('ready');
+          }
+          btn.disabled = !isAffordable;
+        }
+      }
+    });
   }
 
   showCreepHoverDetails(creepDef) {

@@ -25,16 +25,16 @@ const BALANCE = {
     // Central Wall
     MIDDLE_WALL: { x: 26, y: 24, w: 18, h: 42 },
 
-    // 4 Key Zones (Clean Visuals, No Text)
-    SPAWN_ZONE: { x: 57, y: 53, w: 13, h: 13 },   // Bottom-Right Start (6.5x6.5 towers)
-    WAYPOINT_1: { x: 57, y: 0, w: 13, h: 13 },    // Top-Right Checkpoint 1
-    WAYPOINT_2: { x: 0, y: 0, w: 11, h: 11 },     // Top-Left Checkpoint 2
-    EXIT_ZONE: { x: 0, y: 55, w: 11, h: 11 },     // Bottom-Left Goal (5.5x5.5 towers)
+    // 4 Key Zones (Symmetrical 11x11 Cells)
+    SPAWN_ZONE: { x: 59, y: 55, w: 11, h: 11 },   // Bottom-Right Start (11x11)
+    WAYPOINT_1: { x: 59, y: 0, w: 11, h: 11 },    // Top-Right Checkpoint 1 (11x11)
+    WAYPOINT_2: { x: 0, y: 0, w: 11, h: 11 },     // Top-Left Checkpoint 2 (11x11)
+    EXIT_ZONE: { x: 0, y: 55, w: 11, h: 11 },     // Bottom-Left Goal Base (11x11)
 
     // Waypoint Coordinates
     WAYPOINT_COORDS: [
-      { x: 63, y: 59 }, // 0: Spawn (Bottom-Right)
-      { x: 63, y: 6 },  // 1: Checkpoint 1 (Top-Right)
+      { x: 64, y: 60 }, // 0: Spawn (Bottom-Right)
+      { x: 64, y: 5 },  // 1: Checkpoint 1 (Top-Right)
       { x: 5, y: 5 },   // 2: Checkpoint 2 (Top-Left)
       { x: 5, y: 60 }   // 3: Goal Base (Bottom-Left)
     ],
