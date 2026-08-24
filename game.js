@@ -197,19 +197,19 @@ class TowerWarsGame {
   tryUnlockCreative(password) {
     this.sound.init();
     const clean = (password || '').trim().toLowerCase();
-    const valid = ['melafon', 'мелафон', 'melofon', 'мелофон', 'miofon', 'миофон', 'mielophone'];
+    const valid = ['melafon', 'мелафон', 'melofon', 'мелофон', 'miofon', 'миофон', 'milofon', 'милофон', 'mielophone'];
     const statusMsg = document.getElementById('melafon-status-msg');
 
     if (valid.includes(clean)) {
       if (statusMsg) {
-        statusMsg.innerText = '✅ Доступ разрешен! Запуск Melafon...';
+        statusMsg.innerText = '✅ Доступ разрешен! Запуск...';
         statusMsg.style.color = '#10b981';
       }
       this.startCreativeMode();
     } else {
       this.sound.leak();
       if (statusMsg) {
-        statusMsg.innerText = '❌ Неверный пароль (введите: melafon)';
+        statusMsg.innerText = '❌ Неверный пароль!';
         statusMsg.style.color = '#ef4444';
       }
       const inp = document.getElementById('melafon-input');
