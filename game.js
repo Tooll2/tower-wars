@@ -178,29 +178,58 @@ class TowerWarsGame {
     const modal = document.getElementById('mp-modal');
     if (modal) modal.classList.remove('hidden');
 
+    // Melafon AI Bot Opponent
+    this.melafonLevel = 0; // 0 = disabled, 1 = easy, 2 = medium, 3 = hard, 4 = boss
+    this.melafonAiTimer = 0;
+    this.melafonBuildTimer = 0;
+
     this.startEngine();
   }
 
-  startDevMode() {
+  startDevMode(melafonLvl = 0) {
     this.isDevMode = true;
-    this.isCreativeMode = true;
+    this.isCreativeMode = (melafonLvl === 0);
     this.isMultiplayer = false;
     this.isHost = true;
     this.isMatchActive = true;
     this.isGameOver = false;
-    this.gameState = 'CREATIVE';
+    this.gameState = 'BATTLE';
     this.gameTimeSeconds = 0;
+    this.melafonLevel = melafonLvl;
+    this.melafonAiTimer = 0;
+    this.melafonBuildTimer = 0;
 
-    // Infinite resources for developer sandbox
-    this.player.gold = 999999999;
-    this.player.income = 999999;
-    this.player.lives = 999;
-    this.player.tier = 3;
+    if (melafonLvl > 0) {
+      // Balanced PvE Match against Melafon Bot
+      this.player.gold = BALANCE.MAP.STARTING_GOLD || 150;
+      this.player.income = BALANCE.MAP.STARTING_INCOME || 15;
+      this.player.lives = BALANCE.MAP.STARTING_LIVES || 50;
+      this.player.tier = 1;
 
-    this.enemy.gold = 999999999;
-    this.enemy.income = 999999;
-    this.enemy.lives = 999;
-    this.enemy.tier = 3;
+      const botConfig = {
+        1: { gold: 150, income: 15, lives: 50, tier: 1, name: 'Новичок' },
+        2: { gold: 250, income: 25, lives: 60, tier: 2, name: 'Опытный' },
+        3: { gold: 400, income: 40, lives: 75, tier: 3, name: 'Ветеран' },
+        4: { gold: 600, income: 60, lives: 100, tier: 3, name: 'Гроссмейстер' }
+      };
+
+      const cfg = botConfig[melafonLvl] || botConfig[1];
+      this.enemy.gold = cfg.gold;
+      this.enemy.income = cfg.income;
+      this.enemy.lives = cfg.lives;
+      this.enemy.tier = cfg.tier;
+    } else {
+      // Infinite resources for developer sandbox
+      this.player.gold = 999999999;
+      this.player.income = 999999;
+      this.player.lives = 999;
+      this.player.tier = 3;
+
+      this.enemy.gold = 999999999;
+      this.enemy.income = 999999;
+      this.enemy.lives = 999;
+      this.enemy.tier = 3;
+    }
 
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
@@ -237,20 +266,34 @@ class TowerWarsGame {
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
-      modeBadge.innerText = '🔧 DEV (TOOLL)';
-      modeBadge.style.background = '#f59e0b';
-      modeBadge.style.color = '#000';
+      if (melafonLvl > 0) {
+        modeBadge.innerText = `🤖 МЕЛАФОН (УР. ${melafonLvl})`;
+        modeBadge.style.background = '#8b5cf6';
+        modeBadge.style.color = '#ffffff';
+      } else {
+        modeBadge.innerText = '🔧 DEV (TOOLL)';
+        modeBadge.style.background = '#f59e0b';
+        modeBadge.style.color = '#000000';
+      }
       modeBadge.style.fontWeight = '900';
     }
 
+    // Sync active level button in dev toolbar
+    const lvlBtns = document.querySelectorAll('.dev-melafon-lvl');
+    lvlBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.devMelafon, 10) === melafonLvl));
+
     this.sound.upgrade();
-    this.logEvent('🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Доступны все карты, расы, режим стен и бесконечные ресурсы.', 'log-kill');
+    if (melafonLvl > 0) {
+      this.logEvent(`🤖 БОЙ С МЕЛАФОНОМ (Уровень ${melafonLvl}) НАЧАЛСЯ! Мелафон призывает крипов и строит башни.`, 'log-kill');
+    } else {
+      this.logEvent('🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Доступны все карты, расы, режим стен и ресурсы.', 'log-kill');
+    }
     this.renderTowerSelector();
     this.updateHUD();
   }
 
   startCreativeMode() {
-    this.startDevMode();
+    this.startDevMode(0);
   }
 
   tryUnlockCreative(password) {
@@ -264,15 +307,19 @@ class TowerWarsGame {
     const statusMsg = document.getElementById('melafon-status-msg');
 
     if (valid.includes(clean)) {
+      const levelSelect = document.getElementById('melafon-level-select');
+      const selectedLevel = levelSelect ? parseInt(levelSelect.value, 10) : 2;
+      this.melafonLevel = selectedLevel;
+
       if (statusMsg) {
-        statusMsg.innerText = '✅ Доступ разработчика разрешен (TOOLL)! Запуск...';
+        statusMsg.innerText = `✅ Мелафон активирован! (${selectedLevel ? `Уровень ${selectedLevel}` : 'Песочница'}). Запуск...`;
         statusMsg.style.color = '#10b981';
       }
-      this.startDevMode();
+      this.startDevMode(selectedLevel);
     } else {
       this.sound.leak();
       if (statusMsg) {
-        statusMsg.innerText = '❌ Неверный пароль (Подсказка: TOOLL)!';
+        statusMsg.innerText = '❌ Неверный пароль (Подсказка: TOOLL / melafon)!';
         statusMsg.style.color = '#ef4444';
       }
       const inp = document.getElementById('melafon-input');
@@ -411,6 +458,43 @@ class TowerWarsGame {
         }
       });
     }
+
+    // Melafon AI Level Switcher Buttons in Dev Toolbar
+    const melafonBtns = document.querySelectorAll('[data-dev-melafon]');
+    melafonBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.sound.click();
+        const lvl = parseInt(btn.dataset.devMelafon, 10);
+        this.setMelafonLevel(lvl);
+      });
+    });
+  }
+
+  setMelafonLevel(lvl) {
+    this.melafonLevel = lvl;
+    this.melafonAiTimer = 0;
+    this.melafonBuildTimer = 0;
+
+    const melafonBtns = document.querySelectorAll('[data-dev-melafon]');
+    melafonBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.devMelafon, 10) === lvl));
+
+    const modeBadge = document.getElementById('game-mode-badge');
+    if (modeBadge) {
+      if (lvl > 0) {
+        modeBadge.innerText = `🤖 МЕЛАФОН (УР. ${lvl})`;
+        modeBadge.style.background = '#8b5cf6';
+        modeBadge.style.color = '#ffffff';
+      } else {
+        modeBadge.innerText = '🔧 DEV (TOOLL)';
+        modeBadge.style.background = '#f59e0b';
+        modeBadge.style.color = '#000000';
+      }
+      modeBadge.style.fontWeight = '900';
+    }
+
+    const lvlNames = { 0: 'Выключен', 1: 'Уровень 1 (Новичок)', 2: 'Уровень 2 (Опытный)', 3: 'Уровень 3 (Ветеран)', 4: 'Уровень 4 (Гроссмейстер)' };
+    this.logEvent(`🤖 ИИ Мелафона переключен: ${lvlNames[lvl] || `Ур. ${lvl}`}`, lvl > 0 ? 'log-kill' : 'log-income');
+    this.updateHUD();
   }
 
   renderCharacterSelection() {
@@ -1285,6 +1369,9 @@ class TowerWarsGame {
 
     this.updateCreepUIRealtime();
 
+    // Update Melafon AI Bot Actions (Singleplayer PvE)
+    this.updateMelafonAI(dt);
+
     if (this.player.lives <= 0) {
       this.isGameOver = true;
       this.triggerGameOver(false);
@@ -1300,6 +1387,76 @@ class TowerWarsGame {
     const secs = Math.floor(this.gameTimeSeconds % 60).toString().padStart(2, '0');
     const gameTimeElem = document.getElementById('game-time');
     if (gameTimeElem) gameTimeElem.innerText = `${mins}:${secs}`;
+  }
+
+  updateMelafonAI(dt) {
+    if (!this.melafonLevel || this.melafonLevel <= 0 || this.gameState !== 'BATTLE' || this.isMultiplayer || this.isGameOver) return;
+
+    this.melafonAiTimer += dt;
+    this.melafonBuildTimer += dt;
+
+    // 1. CREEP SPAWNING (Intervals based on difficulty level)
+    const spawnIntervals = { 1: 8.0, 2: 5.0, 3: 3.5, 4: 2.2 };
+    const maxIndices = { 1: 3, 2: 6, 3: 9, 4: 12 };
+    const interval = spawnIntervals[this.melafonLevel] || 5.0;
+    const maxIdx = maxIndices[this.melafonLevel] || 6;
+
+    if (this.melafonAiTimer >= interval) {
+      this.melafonAiTimer = 0;
+
+      // Available creeps up to max tier allowed for this difficulty level
+      const pool = BALANCE.CREEPS.slice(0, maxIdx);
+      const affordable = pool.filter(c => this.enemy.gold >= c.cost);
+
+      if (affordable.length > 0) {
+        // AI chooses a creep (weighted towards highest tier)
+        const chosen = affordable[Math.floor(Math.random() * affordable.length)];
+        this.enemy.gold -= chosen.cost;
+        this.enemy.income += chosen.income;
+        this.spawnCreep(this.enemy, this.player, chosen);
+        this.logEvent(`🤖 Мелафон (Ур. ${this.melafonLevel}): отправил «${chosen.name}» (+${chosen.income} инкома)!`, 'log-leak');
+        this.updateHUD();
+      }
+    }
+
+    // 2. TOWER CONSTRUCTION & UPGRADES (Every 10-15s)
+    const buildInterval = this.melafonLevel >= 3 ? 10.0 : 15.0;
+    if (this.melafonBuildTimer >= buildInterval) {
+      this.melafonBuildTimer = 0;
+
+      // AI tries to upgrade an existing tower first (60% chance)
+      const upgradable = (this.enemy.towers || []).filter(t => t.def.upgradeId || BALANCE.getRacialUpgrade(t.def, 'humans'));
+      if (upgradable.length > 0 && Math.random() < 0.6 && this.enemy.gold >= 50) {
+        const targetTower = upgradable[Math.floor(Math.random() * upgradable.length)];
+        const nextDef = targetTower.def.upgradeId ? BALANCE.TOWERS.find(t => t.id === targetTower.def.upgradeId) : null;
+        if (nextDef && this.enemy.gold >= (nextDef.cost || 40)) {
+          this.enemy.gold -= (nextDef.cost || 40);
+          targetTower.def = nextDef;
+          targetTower.level = (targetTower.level || 0) + 1;
+          this.sound.build();
+          this.logEvent(`🤖 Мелафон улучшил башню до «${nextDef.name}»!`, 'log-income');
+          this.updateHUD();
+          return;
+        }
+      }
+
+      // Otherwise build a new tower
+      if (this.enemy.gold >= 25) {
+        const baseTowerDef = BALANCE.TOWERS.find(t => t.id === 'tower_base') || BALANCE.TOWERS[0];
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const gx = 12 + Math.floor(Math.random() * (this.width - 24));
+          const gy = 8 + Math.floor(Math.random() * (this.height - 16));
+          if (this.canPlaceTower(this.enemy, gx, gy, baseTowerDef)) {
+            this.placeTower(this.enemy, gx, gy, baseTowerDef, false, false);
+            this.enemy.gold -= baseTowerDef.cost;
+            this.sound.build();
+            this.logEvent(`🤖 Мелафон построил «${baseTowerDef.name}» на своей базе!`, 'log-income');
+            this.updateHUD();
+            break;
+          }
+        }
+      }
+    }
   }
 
   updateCreepSlots(agent, dt) {
