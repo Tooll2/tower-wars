@@ -83,26 +83,17 @@
           <span class="tip" id="build-panel-tip">ПКМ / Esc для отмены</span>
         </div>
 
-        <!-- Race Selection View (Active during Preparation Phase / Startup) -->
-        <div class="character-select-view" id="character-select-view">
-          <div class="char-view-header">
-            <h4>👑 Выберите расу</h4>
-            <span class="char-view-sub">Определяет ваш уникальный набор расовых башен</span>
-          </div>
-          <div class="character-cards-list" id="character-cards-list"></div>
-        </div>
-
-        <!-- Tower Selector (Active in Battle / Creative Phase) -->
-        <div class="tower-selector-list hidden" id="tower-selector-list"></div>
+        <!-- Tower Selector (Always Active for Chosen Race) -->
+        <div class="tower-selector-list" id="tower-selector-list"></div>
 
         <!-- Selected Tower Inspect Card -->
-        <div class="selected-entity-card hidden" id="selected-entity-card">
+        <div class="selected-entity-card" id="selected-entity-card">
           <div class="card-header">
             <span id="card-title">Выберите объект</span>
             <span class="tag" id="card-type-tag"></span>
           </div>
           <div class="card-details" id="card-details">
-            <p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>
+            <p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>
           </div>
           <div class="card-actions" id="card-actions" style="display: none;">
             <div class="upgrade-buttons-group">
@@ -131,6 +122,35 @@
 
         <div class="canvas-wrapper">
           <canvas id="game-canvas" width="840" height="792"></canvas>
+
+          <!-- Main Screen Race Selection Modal (Active in Preparation Phase) -->
+          <div id="race-selection-modal" class="race-modal-overlay hidden">
+            <div class="race-modal-box">
+              <div class="race-modal-header">
+                <div class="race-header-text">
+                  <h2>👑 ВЫБЕРИТЕ РАСУ (ФАЗА ПОДГОТОВКИ)</h2>
+                  <p>Выберите расу для активации уникального набора башен и спецэффектов в бою</p>
+                </div>
+                <div class="race-modal-timer-badge">
+                  <span id="race-modal-timer">⏱ 01:00</span>
+                </div>
+              </div>
+
+              <div class="race-cards-grid" id="race-cards-grid">
+                <!-- Dynamically rendered 4 rich race cards -->
+              </div>
+
+              <div class="race-modal-footer">
+                <div class="race-selected-summary" id="race-selected-summary">
+                  Выбрана раса: <strong id="summary-race-name" style="color:#10b981;">🛡 Люди (Стражи)</strong> — <span id="summary-race-desc">Ближний бой (Радиус: 2.0, Урон x2).</span>
+                </div>
+                <div class="race-modal-actions">
+                  <button id="btn-modal-ready" class="btn-modal-ready">✅ Я готов к бою (0/2)</button>
+                  <button id="btn-modal-start-now" class="btn-modal-start-now">⚔️ Начать бой немедленно</button>
+                </div>
+              </div>
+            </div>
+          </div>
           
           <!-- Bottom-Right Controls: Path Length Metric & Creative Mode Button -->
           <div class="bottom-right-hud-group">

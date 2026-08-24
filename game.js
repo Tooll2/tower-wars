@@ -249,39 +249,58 @@ class TowerWarsGame {
   }
 
   renderCharacterSelection() {
-    const list = document.getElementById('character-cards-list');
-    if (!list) return;
-    list.innerHTML = '';
+    const grid = document.getElementById('race-cards-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
 
     const chars = BALANCE.CHARACTERS || [];
     chars.forEach((c) => {
       const card = document.createElement('div');
       const isSelected = (this.selectedCharacterId === c.id);
-      card.className = `character-card ${isSelected ? 'selected' : ''}`;
+      card.className = `race-card-rich ${isSelected ? 'selected' : ''}`;
       card.dataset.id = c.id;
+
+      const towersHtml = (c.towersList || []).join(' ➜ ');
+
       card.innerHTML = `
-        <span class="char-card-icon">${c.icon || '👑'}</span>
-        <div class="char-card-info">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
-            <span class="char-card-name">${c.name}</span>
-            ${isSelected ? '<span style="color:#10b981; font-weight:800; font-size:0.7rem;">ВЫБРАНО</span>' : ''}
+        <div class="race-card-top">
+          <span class="race-card-icon-big">${c.icon || '👑'}</span>
+          <div class="race-card-title-group">
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <span class="race-card-name-title">${c.name}</span>
+              ${isSelected ? '<span style="color:#10b981; font-weight:800; font-size:0.72rem;">✅ ВЫБРАНО</span>' : ''}
+            </div>
+            <span class="race-card-perk-pill" style="background: ${c.perkColor ? c.perkColor + '22' : 'rgba(56,189,248,0.15)'}; color: ${c.perkColor || '#38bdf8'}; border: 1px solid ${c.perkColor || '#38bdf8'};">
+              ${c.perkTitle || c.badge || 'Расовый бонус'}
+            </span>
           </div>
-          <span class="char-card-badge">${c.badge || ''}</span>
-          <span class="char-card-desc">${c.desc}</span>
+        </div>
+        <div class="race-card-desc-text">${c.desc}</div>
+        <div class="race-card-towers-preview">
+          <span class="race-towers-label">Ветка башен (Т0 ➜ Т4):</span>
+          <span class="race-towers-list-text">${towersHtml}</span>
         </div>
       `;
+
       card.addEventListener('click', () => {
         this.sound.click();
         this.selectedCharacterId = c.id;
         this.renderCharacterSelection();
         this.renderTowerSelector();
+        this.updatePrepUI();
         this.logEvent(`👑 Выбрана раса: ${c.name}`, 'log-income');
-        if (this.myReadyState) {
-          this.toggleReady();
+        if (this.myReadyState && this.isMultiplayer) {
+          this.sendNetAction('READY_VOTE', {
+            ready: this.myReadyState,
+            charId: this.selectedCharacterId
+          });
         }
       });
-      list.appendChild(card);
+
+      grid.appendChild(card);
     });
+
+    this.updatePrepUI();
   }
 
   startPreparationPhase() {
@@ -290,27 +309,23 @@ class TowerWarsGame {
     this.myReadyState = false;
     this.enemyReadyState = false;
 
+    const modal = document.getElementById('race-selection-modal');
+    if (modal) modal.classList.remove('hidden');
+
     const prepHud = document.getElementById('prep-phase-hud');
     if (prepHud) prepHud.classList.remove('hidden');
 
     const battleTimerBox = document.getElementById('battle-timer-box');
     if (battleTimerBox) battleTimerBox.classList.add('hidden');
 
-    const charView = document.getElementById('character-select-view');
-    if (charView) charView.classList.remove('hidden');
-
-    const towerSelector = document.getElementById('tower-selector-list');
-    if (towerSelector) towerSelector.classList.add('hidden');
-
-    const selectedEntityCard = document.getElementById('selected-entity-card');
-    if (selectedEntityCard) selectedEntityCard.classList.add('hidden');
-
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     const titleElem = document.getElementById('build-panel-title');
-    if (titleElem) titleElem.innerText = '👑 ВЫБОР РАСЫ';
+    if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${charDef ? charDef.name : ''}`;
 
     this.renderCharacterSelection();
+    this.renderTowerSelector();
     this.updatePrepUI();
-    this.logEvent('⏱ Фаза подготовки (60с)! Выберите расу и нажмите «Готов».', 'log-income');
+    this.logEvent('⏱ Фаза подготовки (60с)! Выберите расу на экране и подтвердите готовность.', 'log-income');
   }
 
   toggleReady() {
@@ -325,26 +340,30 @@ class TowerWarsGame {
       });
     }
 
-    if (this.myReadyState && this.enemyReadyState) {
-      if (this.isHost) {
-        this.startBattlePhase();
+    if (this.myReadyState && (this.enemyReadyState || !this.isMultiplayer)) {
+      this.startBattlePhase();
+      if (this.isMultiplayer && this.isHost) {
         this.sendNetAction('BATTLE_START', {});
       }
     }
   }
 
   updatePrepUI() {
+    const sec = Math.max(0, Math.ceil(this.prepTimer));
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    const timeStr = `⏱ ${m}:${s}`;
+
     const timerElem = document.getElementById('prep-timer-text');
-    if (timerElem) {
-      const sec = Math.max(0, Math.ceil(this.prepTimer));
-      const m = Math.floor(sec / 60).toString().padStart(2, '0');
-      const s = (sec % 60).toString().padStart(2, '0');
-      timerElem.innerText = `⏱ Подготовка: ${m}:${s}`;
-    }
+    if (timerElem) timerElem.innerText = `⏱ Подготовка: ${m}:${s}`;
+
+    const modalTimer = document.getElementById('race-modal-timer');
+    if (modalTimer) modalTimer.innerText = timeStr;
+
+    const readyCount = (this.myReadyState ? 1 : 0) + (this.enemyReadyState ? 1 : 0);
 
     const readyBtn = document.getElementById('btn-player-ready');
     if (readyBtn) {
-      const readyCount = (this.myReadyState ? 1 : 0) + (this.enemyReadyState ? 1 : 0);
       if (this.myReadyState) {
         readyBtn.className = 'btn-ready ready-active';
         readyBtn.innerText = `✅ Вы готовы (${readyCount}/2)`;
@@ -353,6 +372,23 @@ class TowerWarsGame {
         readyBtn.innerText = `✅ Я готов (${readyCount}/2)`;
       }
     }
+
+    const modalReadyBtn = document.getElementById('btn-modal-ready');
+    if (modalReadyBtn) {
+      if (this.myReadyState) {
+        modalReadyBtn.className = 'btn-modal-ready ready-active';
+        modalReadyBtn.innerText = `✅ Вы готовы (${readyCount}/2)`;
+      } else {
+        modalReadyBtn.className = 'btn-modal-ready';
+        modalReadyBtn.innerText = `✅ Я готов к бою (${readyCount}/2)`;
+      }
+    }
+
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
+    const sumName = document.getElementById('summary-race-name');
+    const sumDesc = document.getElementById('summary-race-desc');
+    if (sumName && charDef) sumName.innerText = charDef.name;
+    if (sumDesc && charDef) sumDesc.innerText = charDef.desc;
   }
 
   startBattlePhase() {
@@ -360,20 +396,14 @@ class TowerWarsGame {
     this.gameTimeSeconds = 0;
     this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
 
+    const modal = document.getElementById('race-selection-modal');
+    if (modal) modal.classList.add('hidden');
+
     const prepHud = document.getElementById('prep-phase-hud');
     if (prepHud) prepHud.classList.add('hidden');
 
     const battleTimerBox = document.getElementById('battle-timer-box');
     if (battleTimerBox) battleTimerBox.classList.remove('hidden');
-
-    const charView = document.getElementById('character-select-view');
-    if (charView) charView.classList.add('hidden');
-
-    const towerSelector = document.getElementById('tower-selector-list');
-    if (towerSelector) towerSelector.classList.remove('hidden');
-
-    const selectedEntityCard = document.getElementById('selected-entity-card');
-    if (selectedEntityCard) selectedEntityCard.classList.remove('hidden');
 
     const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     const titleElem = document.getElementById('build-panel-title');
@@ -724,8 +754,8 @@ class TowerWarsGame {
       this.prepTimer -= dt;
       if (this.prepTimer <= 0) {
         this.prepTimer = 0;
-        if (this.isHost) {
-          this.startBattlePhase();
+        this.startBattlePhase();
+        if (this.isMultiplayer && this.isHost) {
           this.sendNetAction('BATTLE_START', {});
         }
       }
@@ -2594,11 +2624,28 @@ class TowerWarsGame {
       });
     }
 
-    // Preparation Phase Ready Button Listener
+    // Preparation Phase Ready & Start Buttons Listeners
     const btnReady = document.getElementById('btn-player-ready');
     if (btnReady) {
       btnReady.addEventListener('click', () => {
         this.toggleReady();
+      });
+    }
+
+    const btnModalReady = document.getElementById('btn-modal-ready');
+    if (btnModalReady) {
+      btnModalReady.addEventListener('click', () => {
+        this.toggleReady();
+      });
+    }
+
+    const btnModalStartNow = document.getElementById('btn-modal-start-now');
+    if (btnModalStartNow) {
+      btnModalStartNow.addEventListener('click', () => {
+        this.startBattlePhase();
+        if (this.isMultiplayer && this.isHost) {
+          this.sendNetAction('BATTLE_START', {});
+        }
       });
     }
 
