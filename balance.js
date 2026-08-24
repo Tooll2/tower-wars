@@ -90,7 +90,6 @@ const BALANCE = {
         { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 59, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 0, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
-        { id: 'wp4', name: 'ВОРОТА', type: 'waypoint', icon: '🚪', x: 0, y: 35, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'base', name: 'ЦИТАДЕЛЬ', type: 'base', icon: '🏰', x: 28, y: 26, w: 14, h: 14, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
       ],
       waypointCoords: [
@@ -98,7 +97,6 @@ const BALANCE = {
         { x: 64, y: 5 },
         { x: 64, y: 60 },
         { x: 5, y: 60 },
-        { x: 5, y: 40 },
         { x: 35, y: 33 }
       ]
     },
