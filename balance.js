@@ -31,12 +31,12 @@ const BALANCE = {
     WAYPOINT_2: { x: 0, y: 0, w: 11, h: 11 },     // Top-Left Checkpoint 2 (11x11)
     EXIT_ZONE: { x: 0, y: 55, w: 11, h: 11 },     // Bottom-Left Goal Base (11x11)
 
-    // Waypoint Coordinates
+    // Waypoint Coordinates (Exact Corners)
     WAYPOINT_COORDS: [
-      { x: 64, y: 60 }, // 0: Spawn (Bottom-Right)
-      { x: 64, y: 5 },  // 1: Checkpoint 1 (Top-Right)
-      { x: 5, y: 5 },   // 2: Checkpoint 2 (Top-Left)
-      { x: 5, y: 60 }   // 3: Goal Base (Bottom-Left)
+      { x: 69, y: 65 }, // 0: Spawn (Very Bottom-Right Corner)
+      { x: 69, y: 0 },  // 1: Checkpoint 1 (Very Top-Right Corner)
+      { x: 0, y: 0 },   // 2: Checkpoint 2 (Very Top-Left Corner)
+      { x: 0, y: 65 }   // 3: Goal Base (Very Bottom-Left Corner)
     ],
 
     STARTING_GOLD: 100,

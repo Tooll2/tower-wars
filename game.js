@@ -100,6 +100,7 @@ class TowerWarsGame {
     // Pre-select first tower ("Базовая вышка") so players can build immediately!
     this.selectedTowerToBuild = BALANCE.TOWERS[0];
     this.selectedEntity = null;
+    this.previewUpgradeTower = null;
     this.mouseGridPos = { x: -1, y: -1 };
     this.isHoveringCanvas = false;
 
@@ -130,6 +131,7 @@ class TowerWarsGame {
 
   clearBuildSelection() {
     this.selectedTowerToBuild = null;
+    this.previewUpgradeTower = null;
     this.canvas.style.cursor = 'default';
     this.renderTowerSelector();
   }
@@ -266,12 +268,12 @@ class TowerWarsGame {
   }
 
   spawnCreep(senderAgent, receiverAgent, creepDef) {
-    const sz = BALANCE.MAP.SPAWN_ZONE;
-    const spawnX = sz.x + 2 + Math.random() * (sz.w - 4);
-    const spawnY = sz.y + 2 + Math.random() * (sz.h - 4);
+    const startCoord = BALANCE.MAP.WAYPOINT_COORDS[0];
+    const spawnX = startCoord.x;
+    const spawnY = startCoord.y;
 
     const routePoints = [
-      { x: Math.round(spawnX), y: Math.round(spawnY) },
+      { x: spawnX, y: spawnY },
       BALANCE.MAP.WAYPOINT_COORDS[1],
       BALANCE.MAP.WAYPOINT_COORDS[2],
       BALANCE.MAP.WAYPOINT_COORDS[3]
@@ -626,9 +628,9 @@ class TowerWarsGame {
   }
 
   updateCreeps(agent, dt) {
-    const wp1 = BALANCE.MAP.WAYPOINT_1;
-    const wp2 = BALANCE.MAP.WAYPOINT_2;
-    const ez = BALANCE.MAP.EXIT_ZONE;
+    const wp1 = BALANCE.MAP.WAYPOINT_COORDS[1];
+    const wp2 = BALANCE.MAP.WAYPOINT_COORDS[2];
+    const ez = BALANCE.MAP.WAYPOINT_COORDS[3];
 
     for (let i = agent.creeps.length - 1; i >= 0; i--) {
       const creep = agent.creeps[i];
@@ -646,11 +648,11 @@ class TowerWarsGame {
       }
 
       if (creep.currentWaypointStage === 1) {
-        if (creep.x >= wp1.x && creep.x <= wp1.x + wp1.w && creep.y >= wp1.y && creep.y <= wp1.y + wp1.h) {
+        if (Math.hypot(creep.x - wp1.x, creep.y - wp1.y) < 1.5 || (creep.x >= 68 && creep.y <= 1)) {
           creep.currentWaypointStage = 2;
         }
       } else if (creep.currentWaypointStage === 2) {
-        if (creep.x >= wp2.x && creep.x <= wp2.x + wp2.w && creep.y >= wp2.y && creep.y <= wp2.y + wp2.h) {
+        if (Math.hypot(creep.x - wp2.x, creep.y - wp2.y) < 1.5 || (creep.x <= 1 && creep.y <= 1)) {
           creep.currentWaypointStage = 3;
         }
       }
@@ -673,7 +675,7 @@ class TowerWarsGame {
         }
       }
 
-      const inExit = (creep.x >= ez.x && creep.x <= ez.x + ez.w && creep.y >= ez.y && creep.y <= ez.y + ez.h);
+      const inExit = (Math.hypot(creep.x - ez.x, creep.y - ez.y) < 1.5 || (creep.x <= 1 && creep.y >= 64));
       if ((inExit && creep.currentWaypointStage >= 2) || creep.pathIndex >= (creep.path ? creep.path.length : 0)) {
         agent.lives--;
         agent.creeps.splice(i, 1);
@@ -681,7 +683,7 @@ class TowerWarsGame {
         if (agent === this.player) {
           this.sound.leak();
           this.logEvent(`🚨 УТЕЧКА! ${creep.name} прошел всю карту (-1 ❤️)!`, 'log-leak');
-          this.addFloatingText(ez.x + ez.w / 2, ez.y + ez.h / 2, `-1 ❤️`, '#ef4444', 1.4);
+          this.addFloatingText(ez.x, ez.y, `-1 ❤️`, '#ef4444', 1.4);
 
           if (this.isMultiplayer) {
             this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
@@ -921,6 +923,18 @@ class TowerWarsGame {
       ctx.arc((st.x + 1) * cs, (st.y + 1) * cs, st.def.range * cs, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+
+      if (this.previewUpgradeTower && this.previewUpgradeTower.range) {
+        ctx.strokeStyle = '#10b981cc';
+        ctx.fillStyle = '#10b9811c';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc((st.x + 1) * cs, (st.y + 1) * cs, this.previewUpgradeTower.range * cs, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
     // 7. Creeps
@@ -1198,7 +1212,7 @@ class TowerWarsGame {
     `;
   }
 
-  showTowerInspectCard(towerDef, instance = null) {
+  showTowerInspectCard(towerDef, instance = null, isUpgradePreview = false) {
     const title = document.getElementById('card-title');
     const tag = document.getElementById('card-type-tag');
     if (title) title.innerText = towerDef.name;
@@ -1208,17 +1222,61 @@ class TowerWarsGame {
     const actions = document.getElementById('card-actions');
     if (!details) return;
 
-    let html = `
-      <div class="stat-row"><span>Урон за выстрел:</span><span>${towerDef.damage} ед.</span></div>
-      <div class="stat-row"><span>Скорость атаки:</span><span>${towerDef.attackSpeed} сек</span></div>
-      <div class="stat-row"><span>Радиус поражения:</span><span>${towerDef.range} клеток (${towerDef.range / 2} башен)</span></div>
-    `;
-
-    if (towerDef.critChance > 0) {
-      html += `<div class="stat-row"><span>Критический урон:</span><span style="color:#ec4899">${Math.round(towerDef.critChance * 100)}% x${towerDef.critMultiplier} (${towerDef.damage * towerDef.critMultiplier})</span></div>`;
+    let nextDef = null;
+    if (instance && instance.def && instance.def.upgradeId) {
+      nextDef = BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId);
     }
 
-    html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px;">${towerDef.desc}</p>`;
+    let html = '';
+
+    if (isUpgradePreview && nextDef) {
+      const curDef = instance.def;
+      const dmgDiff = nextDef.damage - curDef.damage;
+      const spdDiff = Number((curDef.attackSpeed - nextDef.attackSpeed).toFixed(2));
+      const rngDiff = Number((nextDef.range - curDef.range).toFixed(1));
+      const critChanceDiff = Math.round((nextDef.critChance - curDef.critChance) * 100);
+
+      html += `
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; font-size: 0.74rem; color: #10b981; text-align: center; font-weight: 700;">
+          ⚡ Предпросмотр: «${nextDef.name}»
+        </div>
+        <div class="stat-row">
+          <span>Урон за выстрел:</span>
+          <span>${curDef.damage} ➜ <b style="color:#10b981;">${nextDef.damage} (+${dmgDiff})</b></span>
+        </div>
+        <div class="stat-row">
+          <span>Скорость атаки:</span>
+          <span>${curDef.attackSpeed}s ➜ <b style="color:#10b981;">${nextDef.attackSpeed}s (${spdDiff > 0 ? 'быстрее на ' + spdDiff + 's' : '0s'})</b></span>
+        </div>
+        <div class="stat-row">
+          <span>Радиус поражения:</span>
+          <span>${curDef.range} ➜ <b style="color:#10b981;">${nextDef.range} (+${rngDiff})</b></span>
+        </div>
+      `;
+
+      if (nextDef.critChance > 0 || curDef.critChance > 0) {
+        html += `
+          <div class="stat-row">
+            <span>Критический урон:</span>
+            <span>${Math.round(curDef.critChance * 100)}% ➜ <b style="color:#10b981;">${Math.round(nextDef.critChance * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</b></span>
+          </div>
+        `;
+      }
+
+      html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px;">${nextDef.desc}</p>`;
+    } else {
+      html += `
+        <div class="stat-row"><span>Урон за выстрел:</span><span>${towerDef.damage} ед.</span></div>
+        <div class="stat-row"><span>Скорость атаки:</span><span>${towerDef.attackSpeed} сек</span></div>
+        <div class="stat-row"><span>Радиус поражения:</span><span>${towerDef.range} клеток (${towerDef.range / 2} башен)</span></div>
+      `;
+
+      if (towerDef.critChance > 0) {
+        html += `<div class="stat-row"><span>Критический урон:</span><span style="color:#ec4899">${Math.round(towerDef.critChance * 100)}% x${towerDef.critMultiplier} (${towerDef.damage * towerDef.critMultiplier})</span></div>`;
+      }
+
+      html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px;">${towerDef.desc}</p>`;
+    }
 
     if (instance) {
       html += `
@@ -1233,9 +1291,22 @@ class TowerWarsGame {
           if (towerDef.upgradeId) {
             upBtn.style.display = 'block';
             upBtn.innerText = `Апгрейд (🪙 ${towerDef.upgradeCost})`;
-            upBtn.onclick = () => this.upgradeSelectedTower(instance);
+            upBtn.onclick = () => {
+              this.previewUpgradeTower = null;
+              this.upgradeSelectedTower(instance);
+            };
+            upBtn.onmouseenter = () => {
+              this.previewUpgradeTower = nextDef;
+              this.showTowerInspectCard(towerDef, instance, true);
+            };
+            upBtn.onmouseleave = () => {
+              this.previewUpgradeTower = null;
+              this.showTowerInspectCard(towerDef, instance, false);
+            };
           } else {
             upBtn.style.display = 'none';
+            upBtn.onmouseenter = null;
+            upBtn.onmouseleave = null;
           }
         }
 
@@ -1243,7 +1314,10 @@ class TowerWarsGame {
         if (sellBtn) {
           const refund = Math.round(towerDef.cost * 0.75);
           sellBtn.innerText = `Продать (+🪙 ${refund})`;
-          sellBtn.onclick = () => this.sellSelectedTower(instance);
+          sellBtn.onclick = () => {
+            this.previewUpgradeTower = null;
+            this.sellSelectedTower(instance);
+          };
         }
       }
     } else {
@@ -1708,6 +1782,7 @@ class TowerWarsGame {
         this.clearBuildSelection();
       } else if (this.selectedEntity !== null) {
         this.selectedEntity = null;
+        this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
         if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
         const actions = document.getElementById('card-actions');
@@ -1719,6 +1794,7 @@ class TowerWarsGame {
       if (e.key === 'Escape') {
         this.clearBuildSelection();
         this.selectedEntity = null;
+        this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
         if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
         const actions = document.getElementById('card-actions');
@@ -1745,6 +1821,7 @@ class TowerWarsGame {
         const success = this.placeTower(this.player, gx, gy, this.selectedTowerToBuild, true, true);
         if (success) {
           this.selectedEntity = this.player.grid[gy][gx];
+          this.previewUpgradeTower = null;
           this.showTowerInspectCard(this.selectedTowerToBuild, this.selectedEntity);
         } else {
           this.sound.leak();
@@ -1752,6 +1829,7 @@ class TowerWarsGame {
         }
       } else {
         this.selectedEntity = null;
+        this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
         if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
         const actions = document.getElementById('card-actions');
