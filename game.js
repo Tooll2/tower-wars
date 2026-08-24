@@ -1714,113 +1714,125 @@ class TowerWarsGame {
     const actions = document.getElementById('card-actions');
     if (!details) return;
 
-    details.classList.remove('show-upgrade-preview');
-
     const curDef = instance ? instance.def : towerDef;
     const nextStandardDef = curDef.upgradeId ? BALANCE.TOWERS.find(t => t.id === curDef.upgradeId) : null;
     const nextRacialDef = BALANCE.getRacialUpgrade(curDef, this.selectedCharacterId);
     const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
 
-    const previewDef = this.previewUpgradeTower || nextRacialDef || nextStandardDef;
+    const curCrit = Math.round((curDef.critChance || 0) * 100);
 
-    let dmgDiffHtml = '';
-    let spdDiffHtml = '';
-    let rngDiffHtml = '';
-    let critDiffHtml = '';
-
-    if (previewDef && previewDef !== curDef) {
-      const dmgDiff = previewDef.damage - curDef.damage;
-      const spdDiff = Number((curDef.attackSpeed - previewDef.attackSpeed).toFixed(2));
-      const rngDiff = Number((previewDef.range - curDef.range).toFixed(1));
-      const critChanceDiff = Math.round(((previewDef.critChance || 0) - (curDef.critChance || 0)) * 100);
-
-      dmgDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.damage} (${dmgDiff >= 0 ? '+' + dmgDiff : dmgDiff})</span>`;
-      spdDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.attackSpeed}s (${spdDiff > 0 ? '-' + spdDiff + 's' : '0s'})</span>`;
-      rngDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.range} (${rngDiff >= 0 ? '+' + rngDiff : rngDiff})</span>`;
-      if (previewDef.critChance > 0 || curDef.critChance > 0) {
-        critDiffHtml = `<span class="upgrade-diff">➜ ${Math.round((previewDef.critChance || 0) * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</span>`;
-      }
+    // Determine if any perk exists on current or next upgrade
+    let perkLabel = '';
+    let curPerkVal = '';
+    if (curDef.multishot || (nextRacialDef && nextRacialDef.multishot)) {
+      perkLabel = '🎯 Мультишот:';
+      curPerkVal = `${curDef.multishot || 1} цел.`;
+    } else if (curDef.slowPercent || (nextRacialDef && nextRacialDef.slowPercent)) {
+      perkLabel = '❄️ Замедление:';
+      curPerkVal = `${Math.round((curDef.slowPercent || 0) * 100)}%`;
+    } else if (curDef.armorShred || (nextRacialDef && nextRacialDef.armorShred)) {
+      perkLabel = '🛡 Срез брони:';
+      curPerkVal = `-${curDef.armorShred || 0}`;
+    } else if (curDef.poisonDps || (nextRacialDef && nextRacialDef.poisonDps)) {
+      perkLabel = '🧪 Яд (DoT):';
+      curPerkVal = `${curDef.poisonDps || 0}/с`;
     }
 
     let html = `
       <div class="stat-row">
-        <span>Урон за выстрел:</span>
-        <span><span class="stat-cur-val">${curDef.damage} ед.</span>${dmgDiffHtml}</span>
+        <span>Урон:</span>
+        <span id="insp-val-dmg" class="stat-val-text">${curDef.damage} ед.</span>
       </div>
       <div class="stat-row">
-        <span>Скорость атаки:</span>
-        <span><span class="stat-cur-val">${curDef.attackSpeed} сек</span>${spdDiffHtml}</span>
+        <span>Скорость:</span>
+        <span id="insp-val-spd" class="stat-val-text">${curDef.attackSpeed} сек</span>
       </div>
       <div class="stat-row">
-        <span>Радиус поражения:</span>
-        <span><span class="stat-cur-val">${curDef.range} кл.</span>${rngDiffHtml}</span>
+        <span>Дальность:</span>
+        <span id="insp-val-rng" class="stat-val-text">${curDef.range} кл.</span>
       </div>
     `;
 
-    if (curDef.critChance > 0 || (previewDef && previewDef.critChance > 0)) {
-      const curCrit = Math.round((curDef.critChance || 0) * 100);
+    if (curCrit > 0 || (nextStandardDef && nextStandardDef.critChance > 0) || (nextRacialDef && nextRacialDef.critChance > 0)) {
       html += `
         <div class="stat-row">
           <span>Критический урон:</span>
-          <span><span class="stat-cur-val" style="color:#ec4899">${curCrit}% x${curDef.critMultiplier || 1.0}</span>${critDiffHtml}</span>
+          <span id="insp-val-crit" class="stat-val-text" style="color:#ec4899">${curCrit}% x${curDef.critMultiplier || 1.0}</span>
         </div>
       `;
     }
 
-    // Special perks preview
-    if (curDef.multishot || (previewDef && previewDef.multishot)) {
-      const curM = curDef.multishot || 1;
-      const nextM = previewDef ? (previewDef.multishot || 1) : curM;
+    if (perkLabel) {
       html += `
         <div class="stat-row">
-          <span>🎯 Мультишот:</span>
-          <span style="color:#a855f7;">${curM} цел. ${nextM !== curM ? `<span class="upgrade-diff">➜ ${nextM} цел.</span>` : ''}</span>
+          <span>${perkLabel}</span>
+          <span id="insp-val-perk" class="stat-val-text" style="color:#38bdf8">${curPerkVal}</span>
         </div>
       `;
     }
 
-    if (curDef.slowPercent || (previewDef && previewDef.slowPercent)) {
-      const curS = Math.round((curDef.slowPercent || 0) * 100);
-      const nextS = previewDef ? Math.round((previewDef.slowPercent || 0) * 100) : curS;
-      html += `
-        <div class="stat-row">
-          <span>❄️ Замедление:</span>
-          <span style="color:#06b6d4;">${curS}% ${nextS !== curS ? `<span class="upgrade-diff">➜ ${nextS}%</span>` : ''}</span>
-        </div>
-      `;
-    }
-
-    if (curDef.armorShred || (previewDef && previewDef.armorShred)) {
-      const curA = curDef.armorShred || 0;
-      const nextA = previewDef ? (previewDef.armorShred || 0) : curA;
-      html += `
-        <div class="stat-row">
-          <span>🛡 Срез брони:</span>
-          <span style="color:#10b981;">-${curA} ${nextA !== curA ? `<span class="upgrade-diff">➜ -${nextA}</span>` : ''}</span>
-        </div>
-      `;
-    }
-
-    if (curDef.poisonDps || (previewDef && previewDef.poisonDps)) {
-      const curP = curDef.poisonDps || 0;
-      const nextP = previewDef ? (previewDef.poisonDps || 0) : curP;
-      html += `
-        <div class="stat-row">
-          <span>🧪 Яд (DoT):</span>
-          <span style="color:#34d399;">${curP}/с ${nextP !== curP ? `<span class="upgrade-diff">➜ ${nextP}/с</span>` : ''}</span>
-        </div>
-      `;
-    }
-
-    html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px; line-height: 1.3;">${curDef.desc}</p>`;
+    html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.25;">${curDef.desc}</p>`;
 
     if (instance) {
       html += `
-        <hr style="border-color:#334155; margin: 6px 0;">
+        <hr style="border-color:#334155; margin: 4px 0;">
         <div class="stat-row"><span>Нанесено урона:</span><span>${instance.totalDamageDealt.toLocaleString()}</span></div>
         <div class="stat-row"><span>Убито крипов:</span><span>${instance.kills}</span></div>
       `;
+    }
 
+    details.innerHTML = html;
+
+    // Helper to update stat text in-place on hover without touching layout or re-rendering buttons
+    const applyPreview = (targetDef) => {
+      const eDmg = document.getElementById('insp-val-dmg');
+      const eSpd = document.getElementById('insp-val-spd');
+      const eRng = document.getElementById('insp-val-rng');
+      const eCrit = document.getElementById('insp-val-crit');
+      const ePerk = document.getElementById('insp-val-perk');
+
+      if (!targetDef) {
+        if (tag) tag.innerText = instance ? `Ур. ${(instance.level || 0) + 1}` : `Цена: 🪙${towerDef.cost}`;
+        if (eDmg) eDmg.innerHTML = `${curDef.damage} ед.`;
+        if (eSpd) eSpd.innerHTML = `${curDef.attackSpeed} сек`;
+        if (eRng) eRng.innerHTML = `${curDef.range} кл.`;
+        if (eCrit) eCrit.innerHTML = `${curCrit}% x${curDef.critMultiplier || 1.0}`;
+        if (ePerk) ePerk.innerHTML = `${curPerkVal}`;
+        return;
+      }
+
+      if (tag) tag.innerText = `➜ ${targetDef.name}`;
+
+      if (eDmg) {
+        const diff = targetDef.damage - curDef.damage;
+        eDmg.innerHTML = `<span style="color:#10b981; font-weight:700;">${targetDef.damage} ед. (+${diff})</span>`;
+      }
+      if (eSpd) {
+        eSpd.innerHTML = `<span style="color:#10b981; font-weight:700;">${targetDef.attackSpeed} сек</span>`;
+      }
+      if (eRng) {
+        const diff = Number((targetDef.range - curDef.range).toFixed(1));
+        const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+        eRng.innerHTML = `<span style="color:#10b981; font-weight:700;">${targetDef.range} кл. (${diffStr})</span>`;
+      }
+      if (eCrit) {
+        const nextCrit = Math.round((targetDef.critChance || 0) * 100);
+        eCrit.innerHTML = `<span style="color:#10b981; font-weight:700;">${nextCrit}% x${targetDef.critMultiplier || 1.0}</span>`;
+      }
+      if (ePerk) {
+        if (targetDef.multishot) {
+          ePerk.innerHTML = `<span style="color:#a855f7; font-weight:700;">➜ ${targetDef.multishot} цел.</span>`;
+        } else if (targetDef.slowPercent) {
+          ePerk.innerHTML = `<span style="color:#06b6d4; font-weight:700;">➜ -${Math.round(targetDef.slowPercent * 100)}%</span>`;
+        } else if (targetDef.armorShred) {
+          ePerk.innerHTML = `<span style="color:#10b981; font-weight:700;">➜ -${targetDef.armorShred}</span>`;
+        } else if (targetDef.poisonDps) {
+          ePerk.innerHTML = `<span style="color:#34d399; font-weight:700;">➜ ${targetDef.poisonDps}/с</span>`;
+        }
+      }
+    };
+
+    if (instance) {
       if (actions) {
         actions.style.display = 'flex';
         const upBtn = document.getElementById('btn-upgrade-tower');
@@ -1834,21 +1846,11 @@ class TowerWarsGame {
             upBtn.style.display = 'block';
             upBtn.innerText = `Обычный (🪙 ${cost})`;
             upBtn.onclick = () => {
-              this.previewUpgradeTower = null;
+              applyPreview(null);
               this.upgradeSelectedTower(instance, nextStandardDef, cost);
             };
-            upBtn.onmouseenter = () => {
-              this.previewUpgradeTower = nextStandardDef;
-              this.showTowerInspectCard(towerDef, instance);
-              const d = document.getElementById('card-details');
-              if (d) d.classList.add('show-upgrade-preview');
-              const t = document.getElementById('card-type-tag');
-              if (t) t.innerText = `➜ ${nextStandardDef.name}`;
-            };
-            upBtn.onmouseleave = () => {
-              this.previewUpgradeTower = null;
-              this.showTowerInspectCard(towerDef, instance);
-            };
+            upBtn.onmouseenter = () => applyPreview(nextStandardDef);
+            upBtn.onmouseleave = () => applyPreview(null);
           } else {
             upBtn.style.display = 'none';
             upBtn.onclick = null;
@@ -1864,21 +1866,11 @@ class TowerWarsGame {
             const badge = charDef ? charDef.badge : 'Расовый';
             upRacialBtn.innerText = `${charDef ? charDef.icon : '✨'} ${badge} (🪙 ${cost})`;
             upRacialBtn.onclick = () => {
-              this.previewUpgradeTower = null;
+              applyPreview(null);
               this.upgradeSelectedTower(instance, nextRacialDef, cost);
             };
-            upRacialBtn.onmouseenter = () => {
-              this.previewUpgradeTower = nextRacialDef;
-              this.showTowerInspectCard(towerDef, instance);
-              const d = document.getElementById('card-details');
-              if (d) d.classList.add('show-upgrade-preview');
-              const t = document.getElementById('card-type-tag');
-              if (t) t.innerText = `➜ ${nextRacialDef.name}`;
-            };
-            upRacialBtn.onmouseleave = () => {
-              this.previewUpgradeTower = null;
-              this.showTowerInspectCard(towerDef, instance);
-            };
+            upRacialBtn.onmouseenter = () => applyPreview(nextRacialDef);
+            upRacialBtn.onmouseleave = () => applyPreview(null);
           } else {
             upRacialBtn.style.display = 'none';
             upRacialBtn.onclick = null;
@@ -1893,7 +1885,7 @@ class TowerWarsGame {
           const refund = Math.round(curDef.cost * 0.75);
           sellBtn.innerText = `Продать (+🪙 ${refund})`;
           sellBtn.onclick = () => {
-            this.previewUpgradeTower = null;
+            applyPreview(null);
             this.sellSelectedTower(instance);
           };
         }
@@ -1901,8 +1893,6 @@ class TowerWarsGame {
     } else {
       if (actions) actions.style.display = 'none';
     }
-
-    details.innerHTML = html;
   }
 
   upgradeSelectedTower(instance, targetDef = null, cost = 40) {
