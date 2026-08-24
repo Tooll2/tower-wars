@@ -300,6 +300,10 @@ class TowerWarsGame {
         this.renderCharacterSelection();
         this.renderTowerSelector();
         this.updatePrepUI();
+
+        const titleElem = document.getElementById('build-panel-title');
+        if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${c.name}`;
+
         this.logEvent(`👑 Выбрана раса: ${c.name}`, 'log-income');
         if (this.myReadyState && this.isMultiplayer) {
           this.sendNetAction('READY_VOTE', {
@@ -1507,16 +1511,11 @@ class TowerWarsGame {
     this.renderCreepButtons();
     this.updateHUD();
 
-    // Default Left Panel View on startup: Race Selection
-    const charView = document.getElementById('character-select-view');
-    const towerSelector = document.getElementById('tower-selector-list');
-    const selectedEntityCard = document.getElementById('selected-entity-card');
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     const titleElem = document.getElementById('build-panel-title');
-
-    if (charView) charView.classList.remove('hidden');
-    if (towerSelector) towerSelector.classList.add('hidden');
-    if (selectedEntityCard) selectedEntityCard.classList.add('hidden');
-    if (titleElem) titleElem.innerText = '👑 ВЫБОР РАСЫ';
+    if (titleElem && charDef) {
+      titleElem.innerText = `🔨 БАШНИ: ${charDef.name}`;
+    }
   }
 
   renderTowerSelector() {
