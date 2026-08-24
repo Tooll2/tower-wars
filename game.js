@@ -55,7 +55,9 @@ class TowerWarsGame {
     this.enemySpeedVote = 1;
     this.gameSpeed = 1.0;
     this.gameTimeSeconds = 0;
-    this.lastTimestamp = 0;
+    this.lastTime = performance.now();
+    this.timeAccumulator = 0;
+    this.isGameOver = false;
     this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
 
     this.activeLane = 'player'; // 'player' or 'enemy'
@@ -115,7 +117,7 @@ class TowerWarsGame {
     const modal = document.getElementById('mp-modal');
     if (modal) modal.classList.remove('hidden');
 
-    requestAnimationFrame(this.gameLoop.bind(this));
+    this.startEngine();
   }
 
   recalculateEffectiveSpeed() {
@@ -353,27 +355,87 @@ class TowerWarsGame {
     this.renderCreepButtons();
   }
 
-  gameLoop(timestamp) {
-    if (!this.lastTimestamp) this.lastTimestamp = timestamp;
-    const deltaMs = timestamp - this.lastTimestamp;
-    this.lastTimestamp = timestamp;
+  startEngine() {
+    this.lastTime = performance.now();
+    this.timeAccumulator = 0;
 
-    const dt = Math.min(deltaMs / 1000, 0.1) * this.gameSpeed;
-
-    if (dt > 0) {
-      this.update(dt);
+    // Web Worker ticker for unthrottled, continuous background game ticks
+    try {
+      const workerBlob = new Blob([`
+        let timer = null;
+        self.onmessage = function(e) {
+          if (e.data === 'start') {
+            if (!timer) {
+              timer = setInterval(function() {
+                self.postMessage('tick');
+              }, 1000 / 60);
+            }
+          } else if (e.data === 'stop') {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        };
+      `], { type: 'application/javascript' });
+      const workerUrl = URL.createObjectURL(workerBlob);
+      this.tickerWorker = new Worker(workerUrl);
+      this.tickerWorker.onmessage = () => {
+        this.stepSimulation();
+      };
+      this.tickerWorker.postMessage('start');
+    } catch (e) {
+      console.warn('Web Worker ticker not supported, fallback to interval:', e);
+      setInterval(() => this.stepSimulation(), 1000 / 60);
     }
 
-    this.render();
-    requestAnimationFrame(this.gameLoop.bind(this));
+    // Main animation loop for 60fps canvas rendering
+    const renderLoop = () => {
+      this.stepSimulation();
+      this.render();
+      requestAnimationFrame(renderLoop);
+    };
+    requestAnimationFrame(renderLoop);
+
+    // Instant catch-up / sync when tab visibility changes or receives focus
+    document.addEventListener('visibilitychange', () => {
+      this.stepSimulation();
+    });
+    window.addEventListener('focus', () => {
+      this.stepSimulation();
+    });
+  }
+
+  stepSimulation() {
+    const now = performance.now();
+    if (!this.lastTime) this.lastTime = now;
+    let deltaSec = (now - this.lastTime) / 1000;
+    this.lastTime = now;
+
+    // Safety ceiling: max 5 seconds catch-up in a single step (prevents freeze on machine sleep)
+    if (deltaSec > 5.0) deltaSec = 5.0;
+    if (deltaSec <= 0) return;
+
+    this.timeAccumulator += deltaSec * this.gameSpeed;
+
+    const FIXED_DT = 1 / 60; // 60 updates per simulated second
+    let maxSteps = 120; // safety ceiling per tick call
+
+    while (this.timeAccumulator >= FIXED_DT && maxSteps > 0) {
+      this.update(FIXED_DT);
+      this.timeAccumulator -= FIXED_DT;
+      maxSteps--;
+    }
   }
 
   update(dt) {
+    if (this.isGameOver) return;
+
     this.gameTimeSeconds += dt;
 
     this.incomeTimer -= dt;
     if (this.incomeTimer <= 0) {
-      this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
+      this.incomeTimer += BALANCE.MAP.INCOME_INTERVAL_SEC;
       this.player.gold += this.player.income;
       this.enemy.gold += this.enemy.income;
       this.sound.coin();
@@ -398,8 +460,10 @@ class TowerWarsGame {
     this.updateCreepUIRealtime();
 
     if (this.player.lives <= 0) {
+      this.isGameOver = true;
       this.triggerGameOver(false);
     } else if (this.enemy.lives <= 0) {
+      this.isGameOver = true;
       this.triggerGameOver(true);
     }
 
@@ -1433,6 +1497,7 @@ class TowerWarsGame {
 
       case 'TIER_UPGRADE': {
         this.enemy.tier = data.payload.tier;
+        this.initCreepSlots(this.enemy);
         this.logEvent(`🌟 Соперник перешел на ТИР ${data.payload.tier}!`, 'log-kill');
         break;
       }
@@ -1570,6 +1635,9 @@ class TowerWarsGame {
   startMultiplayerSession(isHost) {
     this.isMultiplayer = true;
     this.isHost = isHost;
+    this.isGameOver = false;
+    this.gameTimeSeconds = 0;
+    this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
 
     // Reset boards for clean match
     this.player.towers = [];
@@ -1588,8 +1656,15 @@ class TowerWarsGame {
     this.enemy.lives = BALANCE.MAP.STARTING_LIVES;
     this.enemy.tier = 1;
 
+    this.projectiles = [];
+    this.particles = [];
+    this.floatingTexts = [];
+
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
+
+    const overlay = document.getElementById('canvas-overlay-msg');
+    if (overlay) overlay.classList.add('hidden');
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
