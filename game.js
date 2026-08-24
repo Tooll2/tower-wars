@@ -178,7 +178,7 @@ class TowerWarsGame {
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
-      modeBadge.innerText = '🧪 Креатив: «Мелофон»';
+      modeBadge.innerText = '🧪 Креатив: Melafon';
       modeBadge.style.background = '#8b5cf6';
       modeBadge.style.color = '#fff';
     }
@@ -186,11 +186,11 @@ class TowerWarsGame {
     const btnCreative = document.getElementById('btn-creative-mode');
     if (btnCreative) {
       btnCreative.classList.add('active');
-      btnCreative.innerText = '✅ Мелофон (Вкл)';
+      btnCreative.innerText = '✅ Melafon (Вкл)';
     }
 
     this.sound.upgrade();
-    this.logEvent('🧪 Креативный режим «Мелофон» активирован! Бесконечные деньги для строительства лабиринта.', 'log-income');
+    this.logEvent('🧪 Креативный режим Melafon активирован! Бесконечные деньги для строительства лабиринта.', 'log-income');
     this.updateHUD();
   }
 
