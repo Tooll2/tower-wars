@@ -1601,3 +1601,75 @@ button {
   font-size: 0.75rem;
   min-height: 18px;
 }
+
+/* Developer Mode Toolbar */
+.dev-toolbar {
+  background: #090e17;
+  border-bottom: 2px solid #f59e0b;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+
+.dev-toolbar.hidden {
+  display: none !important;
+}
+
+.dev-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dev-badge {
+  background: #f59e0b;
+  color: #000;
+  font-weight: 900;
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.dev-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-right: 2px;
+}
+
+.dev-btn {
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dev-btn:hover {
+  background: #334155;
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.dev-btn.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  font-weight: 800;
+}

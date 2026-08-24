@@ -70,9 +70,44 @@
           </div>
         </div>
 
+        <button id="btn-dev-mode" class="btn-mp" style="background:#f59e0b22; color:#fbbf24; border-color:#f59e0b;">🔧 DEV</button>
         <button id="btn-multiplayer" class="btn-mp">🌐 Комната</button>
       </div>
     </header>
+
+    <!-- Developer Mode Control Bar (Unlocked with password "TOOLL") -->
+    <div id="dev-toolbar" class="dev-toolbar hidden">
+      <div class="dev-toolbar-title">
+        <span class="dev-badge">🔧 DEV РЕЖИМ (TOOLL)</span>
+      </div>
+      
+      <div class="dev-group">
+        <span class="dev-label">🗺 Карта:</span>
+        <button class="dev-btn" data-dev-map="classic">🏰 Классика</button>
+        <button class="dev-btn" data-dev-map="zigzag">⚡ Зигзаг</button>
+        <button class="dev-btn" data-dev-map="spiral">🌀 Спираль</button>
+        <button class="dev-btn" data-dev-map="crossing">⚔️ Перекресток</button>
+        <button class="dev-btn" data-dev-map="custom">🛠️ Кастом</button>
+      </div>
+
+      <div class="dev-group">
+        <span class="dev-label">👑 Раса:</span>
+        <button class="dev-btn" data-dev-race="humans">🛡 Люди</button>
+        <button class="dev-btn" data-dev-race="elves">🏹 Эльфы</button>
+        <button class="dev-btn" data-dev-race="murlocs">🐟 Мурлоки</button>
+        <button class="dev-btn" data-dev-race="trolls">🪓 Тролли</button>
+      </div>
+
+      <div class="dev-group">
+        <span class="dev-label">🛠️ Опции:</span>
+        <button id="dev-btn-architect" class="dev-btn">🧱 Режим Стен</button>
+        <button id="dev-btn-gold" class="dev-btn">🪙 +10k Золота</button>
+        <button id="dev-btn-infinite" class="dev-btn">♾️ Бесконечность</button>
+        <button id="dev-btn-spawn-test" class="dev-btn">👾 Тест волна</button>
+        <button id="dev-btn-clear-creeps" class="dev-btn">🧹 Очистить крипов</button>
+        <button id="dev-btn-battle-toggle" class="dev-btn">⚔️ Старт боя</button>
+      </div>
+    </div>
 
     <!-- Main Game Workspace -->
     <main id="workspace">

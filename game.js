@@ -156,6 +156,10 @@ class TowerWarsGame {
     this.enemyCustomWalls = [];
     this.selectedCustomBlock = null;
 
+    // Developer Mode
+    this.isDevMode = false;
+    this.devArchitectActive = false;
+
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
 
@@ -165,6 +169,7 @@ class TowerWarsGame {
     this.initUI();
     this.bindEvents();
     this.initMultiplayerUI();
+    this.initDevToolbar();
     this.recalculateEffectiveSpeed();
 
     this.logEvent("⚔️ Онлайн 1v1 PvP режим готов. Создайте комнату или введите код соперника!", "log-spawn");
@@ -176,16 +181,17 @@ class TowerWarsGame {
     this.startEngine();
   }
 
-  startCreativeMode() {
-    this.gameState = 'CREATIVE';
+  startDevMode() {
+    this.isDevMode = true;
     this.isCreativeMode = true;
     this.isMultiplayer = false;
     this.isHost = true;
     this.isMatchActive = true;
     this.isGameOver = false;
+    this.gameState = 'CREATIVE';
     this.gameTimeSeconds = 0;
 
-    // Infinite resources for creative sandbox
+    // Infinite resources for developer sandbox
     this.player.gold = 999999999;
     this.player.income = 999999;
     this.player.lives = 999;
@@ -205,6 +211,9 @@ class TowerWarsGame {
     const modal = document.getElementById('mp-modal');
     if (modal) modal.classList.add('hidden');
 
+    const raceModal = document.getElementById('race-selection-modal');
+    if (raceModal) raceModal.classList.add('hidden');
+
     const overlay = document.getElementById('canvas-overlay-msg');
     if (overlay) overlay.classList.add('hidden');
 
@@ -223,45 +232,47 @@ class TowerWarsGame {
     const selectedEntityCard = document.getElementById('selected-entity-card');
     if (selectedEntityCard) selectedEntityCard.classList.remove('hidden');
 
-    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
-    const titleElem = document.getElementById('build-panel-title');
-    if (titleElem) titleElem.innerText = `🧪 МЕЛОФОН: ${charDef ? charDef.name : 'БАШНИ'}`;
+    const devToolbar = document.getElementById('dev-toolbar');
+    if (devToolbar) devToolbar.classList.remove('hidden');
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
-      modeBadge.innerText = '🧪 Креатив: Melafon';
-      modeBadge.style.background = '#8b5cf6';
-      modeBadge.style.color = '#fff';
-    }
-
-    const btnCreative = document.getElementById('btn-creative-mode');
-    if (btnCreative) {
-      btnCreative.classList.add('active');
-      btnCreative.innerText = '✅ Melafon (Вкл)';
+      modeBadge.innerText = '🔧 DEV (TOOLL)';
+      modeBadge.style.background = '#f59e0b';
+      modeBadge.style.color = '#000';
+      modeBadge.style.fontWeight = '900';
     }
 
     this.sound.upgrade();
-    this.logEvent('🧪 Креативный режим Melafon активирован! Бесконечные деньги для строительства лабиринта.', 'log-income');
+    this.logEvent('🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Доступны все карты, расы, режим стен и бесконечные ресурсы.', 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
+  }
+
+  startCreativeMode() {
+    this.startDevMode();
   }
 
   tryUnlockCreative(password) {
     this.sound.init();
     const clean = (password || '').trim().toLowerCase();
-    const valid = ['melafon', 'мелафон', 'melofon', 'мелофон', 'miofon', 'миофон', 'milofon', 'милофон', 'mielophone'];
+    const valid = [
+      'tooll', 'tool', 'тул', 'тоолл',
+      'melafon', 'мелафон', 'melofon', 'мелофон', 'miofon', 'миофон', 'milofon', 'милофон', 'mielophone',
+      'dev', 'developer', 'admin', 'god'
+    ];
     const statusMsg = document.getElementById('melafon-status-msg');
 
     if (valid.includes(clean)) {
       if (statusMsg) {
-        statusMsg.innerText = '✅ Доступ разрешен! Запуск...';
+        statusMsg.innerText = '✅ Доступ разработчика разрешен (TOOLL)! Запуск...';
         statusMsg.style.color = '#10b981';
       }
-      this.startCreativeMode();
+      this.startDevMode();
     } else {
       this.sound.leak();
       if (statusMsg) {
-        statusMsg.innerText = '❌ Неверный пароль!';
+        statusMsg.innerText = '❌ Неверный пароль (Подсказка: TOOLL)!';
         statusMsg.style.color = '#ef4444';
       }
       const inp = document.getElementById('melafon-input');
@@ -269,6 +280,136 @@ class TowerWarsGame {
         inp.style.borderColor = '#ef4444';
         setTimeout(() => { if (inp) inp.style.borderColor = ''; }, 1500);
       }
+    }
+  }
+
+  initDevToolbar() {
+    const devToolbar = document.getElementById('dev-toolbar');
+    const btnDevMode = document.getElementById('btn-dev-mode');
+
+    if (btnDevMode) {
+      btnDevMode.addEventListener('click', () => {
+        this.sound.init();
+        if (this.isDevMode) {
+          if (devToolbar) devToolbar.classList.toggle('hidden');
+        } else {
+          const pass = prompt('Введите пароль разработчика (TOOLL):');
+          if (pass) this.tryUnlockCreative(pass);
+        }
+      });
+    }
+
+    // Map switcher buttons
+    const mapBtns = document.querySelectorAll('[data-dev-map]');
+    mapBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.sound.click();
+        const mapId = btn.dataset.devMap;
+        this.setMap(mapId);
+        if (mapId === 'custom' && (!this.myCustomBlocks || !this.myCustomBlocks.length)) {
+          this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
+        }
+        mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === mapId));
+        this.logEvent(`🔧 DEV: Карта переключена на «${this.activeMap.name}»`, 'log-income');
+      });
+    });
+
+    // Race switcher buttons
+    const raceBtns = document.querySelectorAll('[data-dev-race]');
+    raceBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.sound.click();
+        const raceId = btn.dataset.devRace;
+        this.selectedCharacterId = raceId;
+        this.devArchitectActive = false;
+        this.renderCharacterSelection();
+        this.renderTowerSelector();
+        this.updateHUD();
+        raceBtns.forEach(b => b.classList.toggle('active', b.dataset.devRace === raceId));
+        const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === raceId);
+        this.logEvent(`🔧 DEV: Раса переключена на «${charDef ? charDef.name : raceId}»`, 'log-income');
+      });
+    });
+
+    // Toggle Architect Wall Building Mode
+    const btnArchitect = document.getElementById('dev-btn-architect');
+    if (btnArchitect) {
+      btnArchitect.addEventListener('click', () => {
+        this.sound.click();
+        this.devArchitectActive = !this.devArchitectActive;
+        btnArchitect.classList.toggle('active', this.devArchitectActive);
+        if (this.devArchitectActive && (!this.myCustomBlocks || !this.myCustomBlocks.length)) {
+          this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
+        }
+        this.renderTowerSelector();
+        this.logEvent(`🔧 DEV: Режим стен (Архитектор) ${this.devArchitectActive ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`, 'log-income');
+      });
+    }
+
+    // Add +10,000 Gold
+    const btnGold = document.getElementById('dev-btn-gold');
+    if (btnGold) {
+      btnGold.addEventListener('click', () => {
+        this.sound.coin();
+        this.player.gold += 10000;
+        this.updateHUD();
+        this.logEvent('🔧 DEV: +10,000 🪙 золота добавлено!', 'log-income');
+      });
+    }
+
+    // Toggle Infinite Gold
+    const btnInfinite = document.getElementById('dev-btn-infinite');
+    if (btnInfinite) {
+      btnInfinite.addEventListener('click', () => {
+        this.sound.upgrade();
+        this.player.gold = 999999999;
+        this.player.income = 999999;
+        this.player.lives = 999;
+        this.updateHUD();
+        this.logEvent('🔧 DEV: Бесконечные ресурсы активированы (Золото ∞, Инком ∞, База ∞)!', 'log-kill');
+      });
+    }
+
+    // Test Wave Spawner
+    const btnSpawnTest = document.getElementById('dev-btn-spawn-test');
+    if (btnSpawnTest) {
+      btnSpawnTest.addEventListener('click', () => {
+        this.sound.leak();
+        const creepList = BALANCE.CREEPS_BY_TIER[this.player.tier || 1] || BALANCE.CREEPS_BY_TIER[1];
+        creepList.slice(0, 5).forEach((c, idx) => {
+          setTimeout(() => {
+            this.spawnCreep(this.enemy, this.player, c);
+          }, idx * 300);
+        });
+        this.logEvent('🔧 DEV: Запущена тестовая волна крипов!', 'log-leak');
+      });
+    }
+
+    // Clear All Creeps
+    const btnClearCreeps = document.getElementById('dev-btn-clear-creeps');
+    if (btnClearCreeps) {
+      btnClearCreeps.addEventListener('click', () => {
+        this.sound.coin();
+        this.player.creeps = [];
+        this.enemy.creeps = [];
+        this.updateHUD();
+        this.logEvent('🔧 DEV: Все крипы на поле удалены.', 'log-income');
+      });
+    }
+
+    // Battle Toggle
+    const btnBattleToggle = document.getElementById('dev-btn-battle-toggle');
+    if (btnBattleToggle) {
+      btnBattleToggle.addEventListener('click', () => {
+        this.sound.upgrade();
+        if (this.gameState === 'PREPARATION') {
+          this.startBattlePhase();
+          btnBattleToggle.innerText = '⏱ В подготовку';
+        } else {
+          this.startPreparationPhase();
+          btnBattleToggle.innerText = '⚔️ Старт боя';
+        }
+      });
     }
   }
 
@@ -3197,21 +3338,23 @@ class TowerWarsGame {
       });
     }
 
-    // Secret Word Keyboard Listener ("melafon" / "мелафон" / "melofon" / "miofon")
+    // Secret Word Keyboard Listener ("TOOLL" / "melafon" / "dev")
     window.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (e.key && e.key.length === 1) {
         this.secretCodeBuffer = (this.secretCodeBuffer + e.key.toLowerCase()).slice(-10);
         if (
+          this.secretCodeBuffer.includes('tooll') ||
+          this.secretCodeBuffer.includes('tool') ||
+          this.secretCodeBuffer.includes('тул') ||
           this.secretCodeBuffer.includes('melafon') ||
           this.secretCodeBuffer.includes('мелафон') ||
           this.secretCodeBuffer.includes('melofon') ||
-          this.secretCodeBuffer.includes('мелофон') ||
           this.secretCodeBuffer.includes('miofon') ||
-          this.secretCodeBuffer.includes('миофон')
+          this.secretCodeBuffer.includes('dev')
         ) {
           this.secretCodeBuffer = '';
-          this.startCreativeMode();
+          this.startDevMode();
         }
       }
     });
