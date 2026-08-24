@@ -1010,18 +1010,38 @@ class TowerWarsGame {
         const by = gy * cs;
         const bw = 2 * cs;
         const bh = 2 * cs;
+        const centerX = bx + bw / 2;
+        const centerY = by + bh / 2;
 
-        ctx.fillStyle = canBuild ? '#10b98144' : '#ef444455';
+        // Snapped 2x2 grid box
+        ctx.fillStyle = canBuild ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.35)';
         ctx.fillRect(bx, by, bw, bh);
 
         ctx.strokeStyle = canBuild ? '#10b981' : '#ef4444';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(bx, by, bw, bh);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx + 1, by + 1, bw - 2, bh - 2);
 
-        ctx.strokeStyle = canBuild ? '#10b98188' : '#ef444488';
-        ctx.fillStyle = canBuild ? '#10b98118' : '#ef444418';
+        // Center reticle / tower preview core directly under cursor crosshair
+        ctx.fillStyle = this.selectedTowerToBuild.color;
         ctx.beginPath();
-        ctx.arc(bx + bw / 2, by + bh / 2, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, cs * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Range indicator circle
+        ctx.strokeStyle = canBuild ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+        ctx.fillStyle = canBuild ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       }
@@ -1764,15 +1784,41 @@ class TowerWarsGame {
     this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
   }
 
+  getCanvasMousePos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const canvasAspect = this.canvas.width / this.canvas.height; // 840 / 792 = 1.060606
+    const elemAspect = rect.width / rect.height;
+
+    let actualWidth = rect.width;
+    let actualHeight = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (elemAspect > canvasAspect) {
+      actualWidth = rect.height * canvasAspect;
+      offsetX = (rect.width - actualWidth) / 2;
+    } else if (elemAspect < canvasAspect) {
+      actualHeight = rect.width / canvasAspect;
+      offsetY = (rect.height - actualHeight) / 2;
+    }
+
+    const clientX = e.clientX - rect.left - offsetX;
+    const clientY = e.clientY - rect.top - offsetY;
+
+    const mx = (clientX / actualWidth) * this.canvas.width;
+    const my = (clientY / actualHeight) * this.canvas.height;
+
+    return {
+      mx: Math.max(0, Math.min(this.canvas.width, mx)),
+      my: Math.max(0, Math.min(this.canvas.height, my))
+    };
+  }
+
   bindEvents() {
     this.canvas.addEventListener('mousemove', (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      const scaleX = this.canvas.width / rect.width;
-      const scaleY = this.canvas.height / rect.height;
-      const mx = (e.clientX - rect.left) * scaleX;
-      const my = (e.clientY - rect.top) * scaleY;
+      const { mx, my } = this.getCanvasMousePos(e);
 
-      // 2x2 tower placement: centered symmetrically under the cursor
+      // Center the 2x2 tower exactly under the mouse cursor crosshair
       this.mouseGridPos.x = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
       this.mouseGridPos.y = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
 
@@ -1815,12 +1861,13 @@ class TowerWarsGame {
       }
     });
 
-    this.canvas.addEventListener('click', () => {
+    this.canvas.addEventListener('click', (e) => {
       this.sound.init();
       if (this.activeLane !== 'player') return;
 
-      const rawGx = this.rawMouseGridPos ? this.rawMouseGridPos.x : Math.floor(this.mouseGridPos.x);
-      const rawGy = this.rawMouseGridPos ? this.rawMouseGridPos.y : Math.floor(this.mouseGridPos.y);
+      const { mx, my } = this.getCanvasMousePos(e);
+      const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize)));
+      const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)));
 
       const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
       if (existingTower) {
@@ -1831,8 +1878,8 @@ class TowerWarsGame {
       }
 
       if (this.selectedTowerToBuild) {
-        const buildGx = this.mouseGridPos.x;
-        const buildGy = this.mouseGridPos.y;
+        const buildGx = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
+        const buildGy = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
         const success = this.placeTower(this.player, buildGx, buildGy, this.selectedTowerToBuild, true, true);
         if (success) {
           this.selectedEntity = this.player.grid[buildGy][buildGx];
