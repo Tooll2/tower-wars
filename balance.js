@@ -59,13 +59,16 @@ const BALANCE = {
       ],
       zones: [
         { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 55, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 30, y: 55, w: 12, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 59, y: 55, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
       ],
       waypointCoords: [
         { x: 5, y: 60 },
-        { x: 5, y: 8 },
-        { x: 36, y: 58 },
-        { x: 64, y: 8 },
+        { x: 5, y: 5 },
+        { x: 36, y: 60 },
+        { x: 64, y: 5 },
         { x: 64, y: 60 }
       ]
     },
@@ -84,6 +87,10 @@ const BALANCE = {
       ],
       zones: [
         { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 0, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 59, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 0, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp4', name: 'ВОРОТА', type: 'waypoint', icon: '🚪', x: 0, y: 35, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'base', name: 'ЦИТАДЕЛЬ', type: 'base', icon: '🏰', x: 28, y: 26, w: 14, h: 14, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
       ],
       waypointCoords: [
@@ -91,7 +98,7 @@ const BALANCE = {
         { x: 64, y: 5 },
         { x: 64, y: 60 },
         { x: 5, y: 60 },
-        { x: 10, y: 40 },
+        { x: 5, y: 40 },
         { x: 35, y: 33 }
       ]
     },
