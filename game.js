@@ -478,17 +478,12 @@ class TowerWarsGame {
     this.activeMap = BALANCE.getMap(mapId);
 
     if (this.activeMap && this.activeMap.isCustom) {
+      if (!this.myCustomBlocks || this.myCustomBlocks.length === 0) {
+        this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
+      }
+      this.devTowersTabActive = false;
       if (this.gameState === 'PREPARATION') {
-        if (!this.myCustomBlocks || this.myCustomBlocks.length === 0) {
-          this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
-        }
         this.prepTimer = this.activeMap.prepTimeSec || 180;
-      } else if (this.gameState === 'BATTLE') {
-        if (this.isMultiplayer && this.enemyCustomWalls.length > 0) {
-          this.activeMap.walls = [...this.enemyCustomWalls];
-        } else if (this.placedCustomWalls.length > 0) {
-          this.activeMap.walls = [...this.placedCustomWalls];
-        }
       }
     }
 
@@ -794,15 +789,15 @@ class TowerWarsGame {
   }
 
   isPermanentWall(x, y) {
-    let walls = (this.activeMap && this.activeMap.walls) ? this.activeMap.walls : [BALANCE.MAP.MIDDLE_WALL];
-    if (this.activeMap && this.activeMap.isCustom) {
-      if (this.gameState === 'PREPARATION') {
-        walls = this.placedCustomWalls;
-      } else {
-        walls = (this.isMultiplayer && this.enemyCustomWalls.length > 0)
-          ? this.enemyCustomWalls
-          : (this.activeMap.walls.length > 0 ? this.activeMap.walls : this.placedCustomWalls);
-      }
+    let walls = (this.activeMap && this.activeMap.walls) ? [...this.activeMap.walls] : [];
+    if (this.placedCustomWalls && this.placedCustomWalls.length > 0) {
+      walls = walls.concat(this.placedCustomWalls);
+    }
+    if (this.isMultiplayer && this.enemyCustomWalls && this.enemyCustomWalls.length > 0) {
+      walls = walls.concat(this.enemyCustomWalls);
+    }
+    if (walls.length === 0 && (!this.activeMap || !this.activeMap.isCustom)) {
+      walls = [BALANCE.MAP.MIDDLE_WALL];
     }
     for (const wall of walls) {
       if (x >= wall.x && x < wall.x + wall.w && y >= wall.y && y < wall.y + wall.h) {
@@ -1616,8 +1611,18 @@ class TowerWarsGame {
       ctx.stroke();
     }
 
-    // 3. Obstacle Walls for Active Map
-    const walls = (this.activeMap && this.activeMap.walls) ? this.activeMap.walls : [BALANCE.MAP.MIDDLE_WALL];
+    // 3. Obstacle Walls for Active Map + Custom Placed Walls
+    let walls = (this.activeMap && this.activeMap.walls) ? [...this.activeMap.walls] : [];
+    if (this.placedCustomWalls && this.placedCustomWalls.length > 0) {
+      walls = walls.concat(this.placedCustomWalls);
+    }
+    if (this.isMultiplayer && this.enemyCustomWalls && this.enemyCustomWalls.length > 0) {
+      walls = walls.concat(this.enemyCustomWalls);
+    }
+    if (walls.length === 0 && (!this.activeMap || !this.activeMap.isCustom)) {
+      walls = [BALANCE.MAP.MIDDLE_WALL];
+    }
+
     for (const mw of walls) {
       ctx.fillStyle = '#161f30';
       ctx.fillRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
@@ -1631,7 +1636,7 @@ class TowerWarsGame {
         ctx.lineTo(mw.x * cs + Math.min(mw.w * cs, d + mw.h * cs), mw.y * cs + Math.min(mw.h * cs, -d + mw.w * cs));
         ctx.stroke();
       }
-      ctx.strokeStyle = '#475569';
+      ctx.strokeStyle = (this.activeMap && this.activeMap.isCustom) ? '#f97316' : '#475569';
       ctx.lineWidth = 2.5;
       ctx.strokeRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
     }
@@ -1870,7 +1875,7 @@ class TowerWarsGame {
     }
 
     // Custom Wall Block Ghost Preview during Architect Phase
-    if (this.gameState === 'PREPARATION' && this.selectedCustomBlock && this.activeLane === 'player') {
+    if (this.selectedCustomBlock && this.activeLane === 'player') {
       const gx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, this.mouseGridPos.x));
       const gy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, this.mouseGridPos.y));
       const canPlace = this.canPlaceCustomWall(gx, gy, this.selectedCustomBlock);
@@ -1932,29 +1937,51 @@ class TowerWarsGame {
     list.innerHTML = '';
 
     const titleElem = document.getElementById('build-panel-title');
+    const isCustomMode = (this.activeMap && this.activeMap.isCustom) || this.devArchitectActive;
 
-    // 🛠️ CUSTOM ARCHITECT MODE DURING PREPARATION
-    if (this.gameState === 'PREPARATION' && this.activeMap && this.activeMap.isCustom) {
-      if (titleElem) titleElem.innerText = `🛠️ СТРОИТЕЛЬСТВО СТЕН ДЛЯ СОПЕРНИКА`;
+    // 🛠️ CUSTOM ARCHITECT WALL BLOCKS PANEL
+    if (isCustomMode && !this.devTowersTabActive) {
+      if (titleElem) titleElem.innerText = `🛠️ СТРОИТЕЛЬСТВО СТЕН (10 БЛОКОВ)`;
 
       if (!this.myCustomBlocks || this.myCustomBlocks.length === 0) {
         this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
       }
 
-      // Banner with count and clear button
+      // Banner with count, Auto-Maze, Clear, and Towers toggle
       const banner = document.createElement('div');
       banner.className = 'architect-status-banner';
       banner.innerHTML = `
-        <span>🧱 <strong>${this.placedCustomWalls.length} / 10</strong> блоков</span>
-        <button id="btn-clear-walls" style="background:#ef444433; color:#f87171; border:1px solid #ef4444; border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer;">Очистить</button>
+        <span style="font-weight:700;">🧱 <strong>${this.placedCustomWalls.length} / 10</strong></span>
+        <div style="display:flex; gap:4px; align-items:center;">
+          <button id="btn-random-walls" style="background:#f59e0b22; color:#fbbf24; border:1px solid #f59e0b; border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer;" title="Сгенерировать случайный лабиринт">🎲 Авто-лабиринт</button>
+          <button id="btn-clear-walls" style="background:#ef444422; color:#f87171; border:1px solid #ef4444; border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer;">Очистить</button>
+          <button id="btn-switch-to-towers" style="background:#38bdf822; color:#38bdf8; border:1px solid #38bdf8; border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer;">🔨 Башни</button>
+        </div>
       `;
       list.appendChild(banner);
+
+      const randomBtn = banner.querySelector('#btn-random-walls');
+      if (randomBtn) {
+        randomBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.autoGenerateCustomMaze();
+        });
+      }
 
       const clearBtn = banner.querySelector('#btn-clear-walls');
       if (clearBtn) {
         clearBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           this.clearAllCustomWalls();
+        });
+      }
+
+      const towersBtn = banner.querySelector('#btn-switch-to-towers');
+      if (towersBtn) {
+        towersBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.devTowersTabActive = true;
+          this.renderTowerSelector();
         });
       }
 
@@ -1994,6 +2021,25 @@ class TowerWarsGame {
     const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${charDef ? charDef.name : ''}`;
 
+    if (isCustomMode && this.devTowersTabActive) {
+      const switchBackBanner = document.createElement('div');
+      switchBackBanner.className = 'architect-status-banner';
+      switchBackBanner.innerHTML = `
+        <span>🔨 Режим Башен</span>
+        <button id="btn-switch-to-walls" style="background:#f9731622; color:#f97316; border:1px solid #f97316; border-radius:4px; padding:2px 6px; font-size:0.65rem; cursor:pointer;">🧱 К блокам стен</button>
+      `;
+      list.appendChild(switchBackBanner);
+
+      const wallsBtn = switchBackBanner.querySelector('#btn-switch-to-walls');
+      if (wallsBtn) {
+        wallsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.devTowersTabActive = false;
+          this.renderTowerSelector();
+        });
+      }
+    }
+
     // Only show Base tower + Racial towers of the selected race!
     const availableTowers = BALANCE.TOWERS.filter(tower =>
       tower.id === 'tower_base' || tower.race === this.selectedCharacterId
@@ -2031,6 +2077,34 @@ class TowerWarsGame {
     if (this.selectedTowerToBuild) {
       this.showTowerInspectCard(this.selectedTowerToBuild);
     }
+  }
+
+  autoGenerateCustomMaze() {
+    this.clearAllCustomWalls();
+    if (!this.myCustomBlocks || this.myCustomBlocks.length === 0) {
+      this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
+    }
+
+    let placedCount = 0;
+    for (const block of this.myCustomBlocks) {
+      let placed = false;
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const gx = 12 + Math.floor(Math.random() * (this.width - 24 - block.w));
+        const gy = 8 + Math.floor(Math.random() * (this.height - 16 - block.h));
+        if (this.canPlaceCustomWall(gx, gy, block)) {
+          this.placeCustomWall(gx, gy, block);
+          placed = true;
+          placedCount++;
+          break;
+        }
+      }
+    }
+
+    this.sound.build();
+    this.logEvent(`🎲 Автоматически сгенерирован лабиринт из ${placedCount} блоков стен!`, 'log-income');
+    this.recalculateCreepPaths(this.player);
+    this.renderTowerSelector();
+    this.updateHUD();
   }
 
   renderCreepButtons() {
@@ -2988,7 +3062,7 @@ class TowerWarsGame {
         const { mx, my } = this.getCanvasMousePos(e, true);
 
         // Custom Architect Block Placement
-        if (this.gameState === 'PREPARATION' && this.selectedCustomBlock) {
+        if (this.selectedCustomBlock) {
           const buildGx = Math.max(0, Math.min(this.width - this.selectedCustomBlock.w, Math.floor(mx / this.cellSize)));
           const buildGy = Math.max(0, Math.min(this.height - this.selectedCustomBlock.h, Math.floor(my / this.cellSize)));
           this.placeCustomWall(buildGx, buildGy, this.selectedCustomBlock);
