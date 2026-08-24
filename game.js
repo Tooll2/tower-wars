@@ -121,6 +121,7 @@ class TowerWarsGame {
     this.lastHoverGy = -1;
     this.mouseGridPos = { x: -1, y: -1 };
     this.isHoveringCanvas = false;
+    this.isMatchActive = false;
 
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
@@ -1505,6 +1506,7 @@ class TowerWarsGame {
   }
 
   triggerGameOver(isVictory) {
+    this.isMatchActive = false;
     const overlay = document.getElementById('canvas-overlay-msg');
     const title = document.getElementById('overlay-title');
     const desc = document.getElementById('overlay-desc');
@@ -1536,6 +1538,7 @@ class TowerWarsGame {
     ];
 
     let currentBrokerIdx = 0;
+    let isInitialConnect = true;
 
     const tryConnect = () => {
       const url = brokerUrls[currentBrokerIdx];
@@ -1549,13 +1552,25 @@ class TowerWarsGame {
         this.mqttClient = mqtt.connect(url, {
           clientId: this.myPlayerId,
           clean: true,
+          keepalive: 30,
           connectTimeout: 5000,
           reconnectPeriod: 2000
         });
 
         this.mqttClient.on('connect', () => {
           this.mqttClient.subscribe(this.roomTopic, { qos: 1 }, (err) => {
-            if (!err && onReadyCallback) onReadyCallback();
+            if (!err) {
+              if (isInitialConnect) {
+                isInitialConnect = false;
+                if (onReadyCallback) onReadyCallback();
+              } else {
+                console.log('🌐 MQTT бесшовно переподключен в фоне.');
+                if (this.isMatchActive && !this.isGameOver) {
+                  this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+                  this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
+                }
+              }
+            }
           });
         });
 
@@ -1604,6 +1619,12 @@ class TowerWarsGame {
     switch (data.action) {
       case 'GUEST_JOINED': {
         if (this.isHost) {
+          if (this.isMatchActive && !this.isGameOver) {
+            console.log('Игнорирован повторный GUEST_JOINED во время активного матча');
+            this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+            this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
+            return;
+          }
           this.sendNetAction('MATCH_START', { hostId: this.myPlayerId });
           const modal = document.getElementById('mp-modal');
           if (modal) modal.classList.add('hidden');
@@ -1613,6 +1634,10 @@ class TowerWarsGame {
       }
 
       case 'MATCH_START': {
+        if (this.isMatchActive && !this.isGameOver) {
+          console.log('Игнорирован повторный MATCH_START во время активного матча');
+          return;
+        }
         const modal = document.getElementById('mp-modal');
         if (modal) modal.classList.add('hidden');
         this.startMultiplayerSession(false);
@@ -1806,6 +1831,7 @@ class TowerWarsGame {
     this.isMultiplayer = true;
     this.isHost = isHost;
     this.isGameOver = false;
+    this.isMatchActive = true;
     this.gameTimeSeconds = 0;
     this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
 
