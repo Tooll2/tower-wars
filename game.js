@@ -97,6 +97,21 @@ class TowerWarsGame {
     this.particles = [];
     this.floatingTexts = [];
 
+    // Camera Zoom & Pan System
+    this.camera = {
+      zoom: 1.0,
+      minZoom: 1.0,
+      maxZoom: 3.0,
+      x: 0,
+      y: 0,
+      isDragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      startCamX: 0,
+      startCamY: 0,
+      hasDragged: false
+    };
+
     // Pre-select first tower ("Базовая вышка") so players can build immediately!
     this.selectedTowerToBuild = BALANCE.TOWERS[0];
     this.selectedEntity = null;
@@ -125,6 +140,19 @@ class TowerWarsGame {
     if (modal) modal.classList.remove('hidden');
 
     this.startEngine();
+  }
+
+  clampCamera() {
+    if (this.camera.zoom <= 1.0) {
+      this.camera.zoom = 1.0;
+      this.camera.x = 0;
+      this.camera.y = 0;
+      return;
+    }
+    const minX = this.canvas.width * (1 - this.camera.zoom);
+    const minY = this.canvas.height * (1 - this.camera.zoom);
+    this.camera.x = Math.max(minX, Math.min(0, this.camera.x));
+    this.camera.y = Math.max(minY, Math.min(0, this.camera.y));
   }
 
   recalculateEffectiveSpeed() {
@@ -784,6 +812,11 @@ class TowerWarsGame {
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    ctx.save();
+    // Apply Camera Zoom and Pan Translation
+    ctx.translate(this.camera.x, this.camera.y);
+    ctx.scale(this.camera.zoom, this.camera.zoom);
+
     // 1. Dark Blueprint Background
     ctx.fillStyle = '#0a0f1d';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -883,28 +916,17 @@ class TowerWarsGame {
     drawVibrantZone(wp2, '#a855f733', '#c084fc', '2️⃣'); // Checkpoint 2 (Top-Left)
     drawVibrantZone(ez, '#ef444433', '#f87171', '🏰');   // Exit Goal (Bottom-Left)
 
-    // 5. Dynamic Waypoints Route Guide (Animated Dotted Line following the actual path around towers)
+    // 5. Dynamic Waypoints Route Guide (Subtle Floor Indicator underneath creeps)
     const activeGuidePath = (this.activeLane === 'player' && this.hoverPreviewGuidePath)
       ? this.hoverPreviewGuidePath
       : (agent.guidePath || this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, (x, y) => this.isCellBlocked(agent, x, y)));
 
     if (activeGuidePath && activeGuidePath.length > 1) {
-      // Glow underlay
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo((activeGuidePath[0].x + 0.5) * cs, (activeGuidePath[0].y + 0.5) * cs);
-      for (let i = 1; i < activeGuidePath.length; i++) {
-        ctx.lineTo((activeGuidePath[i].x + 0.5) * cs, (activeGuidePath[i].y + 0.5) * cs);
-      }
-      ctx.stroke();
-
-      // Animated marching dotted line
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 2;
-      const animOffset = (this.gameTimeSeconds * 30) % 16;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+      ctx.lineWidth = 1.5;
+      const animOffset = (this.gameTimeSeconds * 20) % 12;
       ctx.lineDashOffset = -animOffset;
-      ctx.setLineDash([8, 8]);
+      ctx.setLineDash([4, 6]);
       ctx.beginPath();
       ctx.moveTo((activeGuidePath[0].x + 0.5) * cs, (activeGuidePath[0].y + 0.5) * cs);
       for (let i = 1; i < activeGuidePath.length; i++) {
@@ -1078,6 +1100,22 @@ class TowerWarsGame {
         ctx.fill();
         ctx.stroke();
       }
+    }
+
+    ctx.restore();
+
+    // Zoom Indicator Badge when zoomed in
+    if (this.camera.zoom > 1.01) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(this.canvas.width - 100, 10, 90, 26);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(this.canvas.width - 100, 10, 90, 26);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 12px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`🔍 ${this.camera.zoom.toFixed(1)}x`, this.canvas.width - 55, 23);
     }
   }
 
@@ -1821,7 +1859,7 @@ class TowerWarsGame {
     this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
   }
 
-  getCanvasMousePos(e) {
+  getCanvasMousePos(e, applyCamera = true) {
     const rect = this.canvas.getBoundingClientRect();
     const canvasAspect = this.canvas.width / this.canvas.height; // 840 / 792 = 1.060606
     const elemAspect = rect.width / rect.height;
@@ -1842,8 +1880,13 @@ class TowerWarsGame {
     const clientX = e.clientX - rect.left - offsetX;
     const clientY = e.clientY - rect.top - offsetY;
 
-    const mx = (clientX / actualWidth) * this.canvas.width;
-    const my = (clientY / actualHeight) * this.canvas.height;
+    let mx = (clientX / actualWidth) * this.canvas.width;
+    let my = (clientY / actualHeight) * this.canvas.height;
+
+    if (applyCamera && this.camera && this.camera.zoom) {
+      mx = (mx - this.camera.x) / this.camera.zoom;
+      my = (my - this.camera.y) / this.camera.zoom;
+    }
 
     return {
       mx: Math.max(0, Math.min(this.canvas.width, mx)),
@@ -1852,8 +1895,72 @@ class TowerWarsGame {
   }
 
   bindEvents() {
+    // Mouse Wheel Zoom (centered around mouse cursor)
+    this.canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+      const newZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, this.camera.zoom * zoomFactor));
+
+      if (Math.abs(newZoom - this.camera.zoom) > 0.001) {
+        const screenPos = this.getCanvasMousePos(e, false);
+        const worldX = (screenPos.mx - this.camera.x) / this.camera.zoom;
+        const worldY = (screenPos.my - this.camera.y) / this.camera.zoom;
+
+        this.camera.zoom = newZoom;
+        this.camera.x = screenPos.mx - worldX * this.camera.zoom;
+        this.camera.y = screenPos.my - worldY * this.camera.zoom;
+        this.clampCamera();
+
+        const { mx, my } = this.getCanvasMousePos(e, true);
+        this.mouseGridPos.x = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
+        this.mouseGridPos.y = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
+      }
+    }, { passive: false });
+
+    // Double-click to reset zoom to 1.0x
+    this.canvas.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      this.camera.zoom = 1.0;
+      this.camera.x = 0;
+      this.camera.y = 0;
+    });
+
+    // Panning with Middle or Right Drag when zoomed in
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 1 || (e.button === 2 && this.camera.zoom > 1.0)) {
+        this.camera.isDragging = true;
+        this.camera.dragStartX = e.clientX;
+        this.camera.dragStartY = e.clientY;
+        this.camera.startCamX = this.camera.x;
+        this.camera.startCamY = this.camera.y;
+        this.camera.hasDragged = false;
+      }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (this.camera.isDragging) {
+        const dx = e.clientX - this.camera.dragStartX;
+        const dy = e.clientY - this.camera.dragStartY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+          this.camera.hasDragged = true;
+        }
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        this.camera.x = this.camera.startCamX + dx * scaleX;
+        this.camera.y = this.camera.startCamY + dy * scaleY;
+        this.clampCamera();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (this.camera.isDragging) {
+        this.camera.isDragging = false;
+      }
+    });
+
     this.canvas.addEventListener('mousemove', (e) => {
-      const { mx, my } = this.getCanvasMousePos(e);
+      const { mx, my } = this.getCanvasMousePos(e, true);
 
       // Center the 2x2 tower exactly under the mouse cursor crosshair
       this.mouseGridPos.x = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
@@ -1894,6 +2001,10 @@ class TowerWarsGame {
 
     this.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (this.camera.hasDragged) {
+        this.camera.hasDragged = false;
+        return;
+      }
       this.sound.init();
       if (this.selectedTowerToBuild !== null) {
         this.clearBuildSelection();
@@ -1909,6 +2020,11 @@ class TowerWarsGame {
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (this.camera.zoom > 1.01) {
+          this.camera.zoom = 1.0;
+          this.camera.x = 0;
+          this.camera.y = 0;
+        }
         this.clearBuildSelection();
         this.selectedEntity = null;
         this.previewUpgradeTower = null;
@@ -1920,10 +2036,14 @@ class TowerWarsGame {
     });
 
     this.canvas.addEventListener('click', (e) => {
+      if (this.camera.hasDragged) {
+        this.camera.hasDragged = false;
+        return;
+      }
       this.sound.init();
       if (this.activeLane !== 'player') return;
 
-      const { mx, my } = this.getCanvasMousePos(e);
+      const { mx, my } = this.getCanvasMousePos(e, true);
       const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize)));
       const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)));
 
