@@ -78,23 +78,34 @@
     <main id="workspace">
       <!-- Left Panel: Tower Construction -->
       <aside id="build-panel" class="panel">
-        <div class="panel-header">
-          <h3>🔨 СТРОИТЕЛЬСТВО БАШЕН (2×2)</h3>
-          <span class="tip">ПКМ / Esc для отмены выбора</span>
+        <div class="panel-header" id="build-panel-header">
+          <h3 id="build-panel-title">🔨 СТРОИТЕЛЬСТВО БАШЕН</h3>
+          <span class="tip" id="build-panel-tip">ПКМ / Esc для отмены</span>
         </div>
 
+        <!-- Character / Deck Selection View (Active during Preparation Phase) -->
+        <div class="character-select-view hidden" id="character-select-view">
+          <div class="char-view-header">
+            <h4>Выберите персонажа</h4>
+            <span class="char-view-sub">Определяет ваш стартовый набор башен</span>
+          </div>
+          <div class="character-cards-list" id="character-cards-list"></div>
+        </div>
+
+        <!-- Standard Tower Selector (Active in Battle Phase) -->
         <div class="tower-selector-list" id="tower-selector-list"></div>
 
         <div class="selected-entity-card" id="selected-entity-card">
           <div class="card-header">
             <span id="card-title">Выберите объект</span>
-            <span id="card-type-tag" class="tag">Инфо</span>
+            <span class="tag" id="card-type-tag"></span>
           </div>
-          <div class="card-body" id="card-details">
+          <div class="card-details" id="card-details">
             <p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>
           </div>
           <div class="card-actions" id="card-actions" style="display: none;">
-            <button id="btn-upgrade-tower" class="btn-action">Апгрейд</button>
+            <button id="btn-upgrade-tower" class="btn-action">Обычный апгрейд</button>
+            <button id="btn-upgrade-racial" class="btn-action btn-racial-upgrade" style="display: none;">Расовый апгрейд</button>
             <button id="btn-sell-tower" class="btn-danger">Продать (75%)</button>
           </div>
         </div>
@@ -105,7 +116,14 @@
         <div class="lane-tabs">
           <button id="tab-player-lane" class="tab-btn active">🛡 Твоя полоса (Лабиринт)</button>
           <button id="tab-enemy-lane" class="tab-btn">⚔ Полоса соперника (Твои крипы)</button>
-          <div class="game-timer-box">Время: <span id="game-time">00:00</span></div>
+          
+          <!-- Preparation Phase HUD (Countdown & Ready Button) -->
+          <div id="prep-phase-hud" class="prep-phase-hud hidden">
+            <span id="prep-timer-text" class="prep-timer">⏱ Подготовка: 01:00</span>
+            <button id="btn-player-ready" class="btn-ready">✅ Я готов (0/2)</button>
+          </div>
+
+          <div class="game-timer-box" id="battle-timer-box">Время: <span id="game-time">00:00</span></div>
         </div>
 
         <div class="canvas-wrapper">

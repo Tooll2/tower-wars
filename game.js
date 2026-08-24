@@ -125,6 +125,13 @@ class TowerWarsGame {
     this.isCreativeMode = false;
     this.secretCodeBuffer = '';
 
+    // Lifecycle States: 'IDLE' (frozen at start), 'PREPARATION' (60s prep), 'BATTLE' (active match), 'CREATIVE'
+    this.gameState = 'IDLE';
+    this.prepTimer = 60;
+    this.myReadyState = false;
+    this.enemyReadyState = false;
+    this.selectedCharacterId = (BALANCE.CHARACTERS && BALANCE.CHARACTERS[0]) ? BALANCE.CHARACTERS[0].id : 'humans';
+
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
 
@@ -146,6 +153,7 @@ class TowerWarsGame {
   }
 
   startCreativeMode() {
+    this.gameState = 'CREATIVE';
     this.isCreativeMode = true;
     this.isMultiplayer = false;
     this.isHost = true;
@@ -176,6 +184,18 @@ class TowerWarsGame {
     const overlay = document.getElementById('canvas-overlay-msg');
     if (overlay) overlay.classList.add('hidden');
 
+    const prepHud = document.getElementById('prep-phase-hud');
+    if (prepHud) prepHud.classList.add('hidden');
+
+    const battleTimerBox = document.getElementById('battle-timer-box');
+    if (battleTimerBox) battleTimerBox.classList.remove('hidden');
+
+    const charView = document.getElementById('character-select-view');
+    if (charView) charView.classList.add('hidden');
+
+    const towerSelector = document.getElementById('tower-selector-list');
+    if (towerSelector) towerSelector.classList.remove('hidden');
+
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
       modeBadge.innerText = '🧪 Креатив: Melafon';
@@ -191,6 +211,7 @@ class TowerWarsGame {
 
     this.sound.upgrade();
     this.logEvent('🧪 Креативный режим Melafon активирован! Бесконечные деньги для строительства лабиринта.', 'log-income');
+    this.renderTowerSelector();
     this.updateHUD();
   }
 
@@ -218,6 +239,131 @@ class TowerWarsGame {
         setTimeout(() => { if (inp) inp.style.borderColor = ''; }, 1500);
       }
     }
+  }
+
+  renderCharacterSelection() {
+    const list = document.getElementById('character-cards-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    const chars = BALANCE.CHARACTERS || [];
+    chars.forEach((c) => {
+      const card = document.createElement('div');
+      card.className = `character-card ${this.selectedCharacterId === c.id ? 'selected' : ''}`;
+      card.dataset.id = c.id;
+      card.innerHTML = `
+        <span class="char-card-icon">${c.icon || '👑'}</span>
+        <div class="char-card-info">
+          <span class="char-card-name">${c.name}</span>
+          <span class="char-card-desc">${c.desc}</span>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        this.sound.click();
+        this.selectedCharacterId = c.id;
+        document.querySelectorAll('.character-card').forEach(el => el.classList.remove('selected'));
+        card.classList.add('selected');
+        this.logEvent(`👤 Выбран персонаж: ${c.name}`, 'log-income');
+        if (this.myReadyState) {
+          this.toggleReady();
+        }
+      });
+      list.appendChild(card);
+    });
+  }
+
+  startPreparationPhase() {
+    this.gameState = 'PREPARATION';
+    this.prepTimer = 60;
+    this.myReadyState = false;
+    this.enemyReadyState = false;
+
+    const prepHud = document.getElementById('prep-phase-hud');
+    if (prepHud) prepHud.classList.remove('hidden');
+
+    const battleTimerBox = document.getElementById('battle-timer-box');
+    if (battleTimerBox) battleTimerBox.classList.add('hidden');
+
+    const charView = document.getElementById('character-select-view');
+    if (charView) charView.classList.remove('hidden');
+
+    const towerSelector = document.getElementById('tower-selector-list');
+    if (towerSelector) towerSelector.classList.add('hidden');
+
+    const titleElem = document.getElementById('build-panel-title');
+    if (titleElem) titleElem.innerText = '👤 ВЫБОР ПЕРСОНАЖА';
+
+    this.renderCharacterSelection();
+    this.updatePrepUI();
+    this.logEvent('⏱ Фаза подготовки (60с)! Выберите персонажа и нажмите «Готов».', 'log-income');
+  }
+
+  toggleReady() {
+    this.myReadyState = !this.myReadyState;
+    this.sound.click();
+    this.updatePrepUI();
+
+    if (this.isMultiplayer) {
+      this.sendNetAction('READY_VOTE', {
+        ready: this.myReadyState,
+        charId: this.selectedCharacterId
+      });
+    }
+
+    if (this.myReadyState && this.enemyReadyState) {
+      if (this.isHost) {
+        this.startBattlePhase();
+        this.sendNetAction('BATTLE_START', {});
+      }
+    }
+  }
+
+  updatePrepUI() {
+    const timerElem = document.getElementById('prep-timer-text');
+    if (timerElem) {
+      const sec = Math.max(0, Math.ceil(this.prepTimer));
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = (sec % 60).toString().padStart(2, '0');
+      timerElem.innerText = `⏱ Подготовка: ${m}:${s}`;
+    }
+
+    const readyBtn = document.getElementById('btn-player-ready');
+    if (readyBtn) {
+      const readyCount = (this.myReadyState ? 1 : 0) + (this.enemyReadyState ? 1 : 0);
+      if (this.myReadyState) {
+        readyBtn.className = 'btn-ready ready-active';
+        readyBtn.innerText = `✅ Вы готовы (${readyCount}/2)`;
+      } else {
+        readyBtn.className = 'btn-ready';
+        readyBtn.innerText = `✅ Я готов (${readyCount}/2)`;
+      }
+    }
+  }
+
+  startBattlePhase() {
+    this.gameState = 'BATTLE';
+    this.gameTimeSeconds = 0;
+    this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
+
+    const prepHud = document.getElementById('prep-phase-hud');
+    if (prepHud) prepHud.classList.add('hidden');
+
+    const battleTimerBox = document.getElementById('battle-timer-box');
+    if (battleTimerBox) battleTimerBox.classList.remove('hidden');
+
+    const charView = document.getElementById('character-select-view');
+    if (charView) charView.classList.add('hidden');
+
+    const towerSelector = document.getElementById('tower-selector-list');
+    if (towerSelector) towerSelector.classList.remove('hidden');
+
+    const titleElem = document.getElementById('build-panel-title');
+    if (titleElem) titleElem.innerText = '🔨 СТРОИТЕЛЬСТВО БАШЕН (2×2)';
+
+    this.sound.upgrade();
+    this.logEvent('⚔️ БОЙ НАЧАЛСЯ! Спавните крипов и укрепляйте лабиринт!', 'log-kill');
+    this.renderTowerSelector();
+    this.updateHUD();
   }
 
   clampCamera() {
@@ -553,6 +699,20 @@ class TowerWarsGame {
 
   update(dt) {
     if (this.isGameOver) return;
+    if (this.gameState === 'IDLE') return; // Completely frozen before match starts!
+
+    if (this.gameState === 'PREPARATION') {
+      this.prepTimer -= dt;
+      if (this.prepTimer <= 0) {
+        this.prepTimer = 0;
+        if (this.isHost) {
+          this.startBattlePhase();
+          this.sendNetAction('BATTLE_START', {});
+        }
+      }
+      this.updatePrepUI();
+      return; // In preparation phase, no income ticks, no creep movement
+    }
 
     this.gameTimeSeconds += dt;
 
@@ -626,22 +786,25 @@ class TowerWarsGame {
 
       const towerCenterX = tower.x + 1;
       const towerCenterY = tower.y + 1;
-      let bestTarget = null;
-      let maxProgress = -1;
+      const inRangeCreeps = [];
 
       for (const creep of agent.creeps) {
+        if (creep.hp <= 0) continue;
         const dist = Math.hypot(creep.x - towerCenterX, creep.y - towerCenterY);
         if (dist <= tower.def.range) {
           const score = creep.currentWaypointStage * 1000 + creep.pathIndex;
-          if (score > maxProgress) {
-            maxProgress = score;
-            bestTarget = creep;
-          }
+          inRangeCreeps.push({ creep, score });
         }
       }
 
-      if (bestTarget) {
-        this.fireTower(agent, tower, bestTarget);
+      if (inRangeCreeps.length > 0) {
+        inRangeCreeps.sort((a, b) => b.score - a.score);
+        const targetCount = Math.min(inRangeCreeps.length, tower.def.multishot || 1);
+        const selectedTargets = inRangeCreeps.slice(0, targetCount).map(item => item.creep);
+
+        for (const target of selectedTargets) {
+          this.fireTower(agent, tower, target);
+        }
         tower.attackCooldown = tower.def.attackSpeed;
       }
     }
@@ -697,7 +860,26 @@ class TowerWarsGame {
     const tower = p.tower;
 
     if (p.target && p.target.hp > 0) {
-      this.applyDamage(agent, tower, p.target, 1.0);
+      const creep = p.target;
+
+      // 🐟 Murlocs Slow Effect
+      if (tower.def.slowPercent > 0) {
+        creep.slowTimer = 2.5;
+        creep.speed = creep.baseSpeed * (1 - tower.def.slowPercent);
+      }
+
+      // 🏹 Trolls Armor Shred Effect
+      if (tower.def.armorShred > 0) {
+        creep.armor = Math.max(0, creep.armor - tower.def.armorShred);
+      }
+
+      // 🏹 Trolls Poison DoT Effect
+      if (tower.def.poisonDps > 0) {
+        creep.poisonTimer = 3.0;
+        creep.poisonDps = Math.max(creep.poisonDps || 0, tower.def.poisonDps);
+      }
+
+      this.applyDamage(agent, tower, creep, 1.0);
       this.createHitSparks(p.targetX, p.targetY, tower.def.color);
     }
   }
@@ -756,10 +938,25 @@ class TowerWarsGame {
     for (let i = agent.creeps.length - 1; i >= 0; i--) {
       const creep = agent.creeps[i];
 
+      // Slow Timer
       if (creep.slowTimer > 0) {
         creep.slowTimer -= dt;
         if (creep.slowTimer <= 0) {
           creep.speed = creep.baseSpeed;
+        }
+      }
+
+      // Poison DoT
+      if (creep.poisonTimer > 0) {
+        creep.poisonTimer -= dt;
+        const poisonDmg = (creep.poisonDps || 0) * dt;
+        creep.hp -= poisonDmg;
+        if (creep.hp <= 0) {
+          if (agent === this.player) {
+            this.onCreepKilled(agent, creep);
+          }
+          agent.creeps.splice(i, 1);
+          continue;
         }
       }
 
@@ -1394,29 +1591,29 @@ class TowerWarsGame {
 
     details.classList.remove('show-upgrade-preview');
 
-    let nextDef = null;
-    if (instance && instance.def && instance.def.upgradeId) {
-      nextDef = BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId);
-    }
-
     const curDef = instance ? instance.def : towerDef;
+    const nextStandardDef = curDef.upgradeId ? BALANCE.TOWERS.find(t => t.id === curDef.upgradeId) : null;
+    const nextRacialDef = BALANCE.getRacialUpgrade(curDef, this.selectedCharacterId);
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
+
+    const previewDef = this.previewUpgradeTower || nextRacialDef || nextStandardDef;
 
     let dmgDiffHtml = '';
     let spdDiffHtml = '';
     let rngDiffHtml = '';
     let critDiffHtml = '';
 
-    if (nextDef) {
-      const dmgDiff = nextDef.damage - curDef.damage;
-      const spdDiff = Number((curDef.attackSpeed - nextDef.attackSpeed).toFixed(2));
-      const rngDiff = Number((nextDef.range - curDef.range).toFixed(1));
-      const critChanceDiff = Math.round((nextDef.critChance - curDef.critChance) * 100);
+    if (previewDef && previewDef !== curDef) {
+      const dmgDiff = previewDef.damage - curDef.damage;
+      const spdDiff = Number((curDef.attackSpeed - previewDef.attackSpeed).toFixed(2));
+      const rngDiff = Number((previewDef.range - curDef.range).toFixed(1));
+      const critChanceDiff = Math.round(((previewDef.critChance || 0) - (curDef.critChance || 0)) * 100);
 
-      dmgDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.damage} (+${dmgDiff})</span>`;
-      spdDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.attackSpeed}s (${spdDiff > 0 ? '-' + spdDiff + 's' : '0s'})</span>`;
-      rngDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.range} (+${rngDiff})</span>`;
-      if (nextDef.critChance > 0 || curDef.critChance > 0) {
-        critDiffHtml = `<span class="upgrade-diff">➜ ${Math.round(nextDef.critChance * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</span>`;
+      dmgDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.damage} (${dmgDiff >= 0 ? '+' + dmgDiff : dmgDiff})</span>`;
+      spdDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.attackSpeed}s (${spdDiff > 0 ? '-' + spdDiff + 's' : '0s'})</span>`;
+      rngDiffHtml = `<span class="upgrade-diff">➜ ${previewDef.range} (${rngDiff >= 0 ? '+' + rngDiff : rngDiff})</span>`;
+      if (previewDef.critChance > 0 || curDef.critChance > 0) {
+        critDiffHtml = `<span class="upgrade-diff">➜ ${Math.round((previewDef.critChance || 0) * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</span>`;
       }
     }
 
@@ -1435,12 +1632,57 @@ class TowerWarsGame {
       </div>
     `;
 
-    if (curDef.critChance > 0 || (nextDef && nextDef.critChance > 0)) {
-      const curCrit = Math.round(curDef.critChance * 100);
+    if (curDef.critChance > 0 || (previewDef && previewDef.critChance > 0)) {
+      const curCrit = Math.round((curDef.critChance || 0) * 100);
       html += `
         <div class="stat-row">
           <span>Критический урон:</span>
-          <span><span class="stat-cur-val" style="color:#ec4899">${curCrit}% x${curDef.critMultiplier}</span>${critDiffHtml}</span>
+          <span><span class="stat-cur-val" style="color:#ec4899">${curCrit}% x${curDef.critMultiplier || 1.0}</span>${critDiffHtml}</span>
+        </div>
+      `;
+    }
+
+    // Special perks preview
+    if (curDef.multishot || (previewDef && previewDef.multishot)) {
+      const curM = curDef.multishot || 1;
+      const nextM = previewDef ? (previewDef.multishot || 1) : curM;
+      html += `
+        <div class="stat-row">
+          <span>🎯 Мультишот:</span>
+          <span style="color:#a855f7;">${curM} цел. ${nextM !== curM ? `<span class="upgrade-diff">➜ ${nextM} цел.</span>` : ''}</span>
+        </div>
+      `;
+    }
+
+    if (curDef.slowPercent || (previewDef && previewDef.slowPercent)) {
+      const curS = Math.round((curDef.slowPercent || 0) * 100);
+      const nextS = previewDef ? Math.round((previewDef.slowPercent || 0) * 100) : curS;
+      html += `
+        <div class="stat-row">
+          <span>❄️ Замедление:</span>
+          <span style="color:#06b6d4;">${curS}% ${nextS !== curS ? `<span class="upgrade-diff">➜ ${nextS}%</span>` : ''}</span>
+        </div>
+      `;
+    }
+
+    if (curDef.armorShred || (previewDef && previewDef.armorShred)) {
+      const curA = curDef.armorShred || 0;
+      const nextA = previewDef ? (previewDef.armorShred || 0) : curA;
+      html += `
+        <div class="stat-row">
+          <span>🛡 Срез брони:</span>
+          <span style="color:#10b981;">-${curA} ${nextA !== curA ? `<span class="upgrade-diff">➜ -${nextA}</span>` : ''}</span>
+        </div>
+      `;
+    }
+
+    if (curDef.poisonDps || (previewDef && previewDef.poisonDps)) {
+      const curP = curDef.poisonDps || 0;
+      const nextP = previewDef ? (previewDef.poisonDps || 0) : curP;
+      html += `
+        <div class="stat-row">
+          <span>🧪 Яд (DoT):</span>
+          <span style="color:#34d399;">${curP}/с ${nextP !== curP ? `<span class="upgrade-diff">➜ ${nextP}/с</span>` : ''}</span>
         </div>
       `;
     }
@@ -1453,41 +1695,77 @@ class TowerWarsGame {
         <div class="stat-row"><span>Нанесено урона:</span><span>${instance.totalDamageDealt.toLocaleString()}</span></div>
         <div class="stat-row"><span>Убито крипов:</span><span>${instance.kills}</span></div>
       `;
+
       if (actions) {
         actions.style.display = 'flex';
         const upBtn = document.getElementById('btn-upgrade-tower');
+        const upRacialBtn = document.getElementById('btn-upgrade-racial');
+
+        const cost = curDef.upgradeCost || 40;
+
+        // 1. Standard Upgrade Button
         if (upBtn) {
-          if (towerDef.upgradeId && nextDef) {
+          if (nextStandardDef && curDef.race === 'neutral') {
             upBtn.style.display = 'block';
-            upBtn.innerText = `Апгрейд (🪙 ${towerDef.upgradeCost})`;
+            upBtn.innerText = `Обычный (🪙 ${cost})`;
             upBtn.onclick = () => {
               this.previewUpgradeTower = null;
-              this.upgradeSelectedTower(instance);
+              this.upgradeSelectedTower(instance, nextStandardDef, cost);
             };
             upBtn.onmouseenter = () => {
-              this.previewUpgradeTower = nextDef;
+              this.previewUpgradeTower = nextStandardDef;
+              this.showTowerInspectCard(towerDef, instance);
               const d = document.getElementById('card-details');
               if (d) d.classList.add('show-upgrade-preview');
               const t = document.getElementById('card-type-tag');
-              if (t) t.innerText = `➜ ${nextDef.name}`;
+              if (t) t.innerText = `➜ ${nextStandardDef.name}`;
             };
             upBtn.onmouseleave = () => {
               this.previewUpgradeTower = null;
-              const d = document.getElementById('card-details');
-              if (d) d.classList.remove('show-upgrade-preview');
-              const t = document.getElementById('card-type-tag');
-              if (t) t.innerText = `Ур. ${(instance.level || 0) + 1}`;
+              this.showTowerInspectCard(towerDef, instance);
             };
           } else {
             upBtn.style.display = 'none';
+            upBtn.onclick = null;
             upBtn.onmouseenter = null;
             upBtn.onmouseleave = null;
           }
         }
 
+        // 2. Racial Upgrade Button
+        if (upRacialBtn) {
+          if (nextRacialDef) {
+            upRacialBtn.style.display = 'block';
+            const badge = charDef ? charDef.badge : 'Расовый';
+            upRacialBtn.innerText = `${charDef ? charDef.icon : '✨'} ${badge} (🪙 ${cost})`;
+            upRacialBtn.onclick = () => {
+              this.previewUpgradeTower = null;
+              this.upgradeSelectedTower(instance, nextRacialDef, cost);
+            };
+            upRacialBtn.onmouseenter = () => {
+              this.previewUpgradeTower = nextRacialDef;
+              this.showTowerInspectCard(towerDef, instance);
+              const d = document.getElementById('card-details');
+              if (d) d.classList.add('show-upgrade-preview');
+              const t = document.getElementById('card-type-tag');
+              if (t) t.innerText = `➜ ${nextRacialDef.name}`;
+            };
+            upRacialBtn.onmouseleave = () => {
+              this.previewUpgradeTower = null;
+              this.showTowerInspectCard(towerDef, instance);
+            };
+          } else {
+            upRacialBtn.style.display = 'none';
+            upRacialBtn.onclick = null;
+            upRacialBtn.onmouseenter = null;
+            upRacialBtn.onmouseleave = null;
+          }
+        }
+
+        // Sell Button
         const sellBtn = document.getElementById('btn-sell-tower');
         if (sellBtn) {
-          const refund = Math.round(towerDef.cost * 0.75);
+          const refund = Math.round(curDef.cost * 0.75);
           sellBtn.innerText = `Продать (+🪙 ${refund})`;
           sellBtn.onclick = () => {
             this.previewUpgradeTower = null;
@@ -1502,20 +1780,23 @@ class TowerWarsGame {
     details.innerHTML = html;
   }
 
-  upgradeSelectedTower(instance) {
-    if (!instance || !instance.def.upgradeId) return;
-    const nextDef = BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId);
+  upgradeSelectedTower(instance, targetDef = null, cost = 40) {
+    if (!instance) return;
+    const nextDef = targetDef || (instance.def.upgradeId ? BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId) : null);
     if (!nextDef) return;
 
+    const actualCost = cost || instance.def.upgradeCost || 40;
+
     if (!this.isCreativeMode) {
-      if (this.player.gold < instance.def.upgradeCost) {
-        this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${instance.def.upgradeCost})!`, 'log-leak');
+      if (this.player.gold < actualCost) {
+        this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${actualCost})!`, 'log-leak');
         return;
       }
-      this.player.gold -= instance.def.upgradeCost;
+      this.player.gold -= actualCost;
     }
 
     instance.def = nextDef;
+    instance.level = (instance.level || 0) + 1;
     this.sound.build();
     this.logEvent(`⬆️ Башня улучшена до «${nextDef.name}»!`, 'log-income');
     this.showTowerInspectCard(nextDef, instance);
@@ -1819,6 +2100,21 @@ class TowerWarsGame {
         this.logEvent(`⚡ Соперник выбрал скорость ${this.enemySpeedVote}x (Итоговая: ${this.gameSpeed}x)`, 'log-income');
         break;
       }
+
+      case 'READY_VOTE': {
+        this.enemyReadyState = !!data.payload.ready;
+        this.updatePrepUI();
+        if (this.isHost && this.myReadyState && this.enemyReadyState) {
+          this.startBattlePhase();
+          this.sendNetAction('BATTLE_START', {});
+        }
+        break;
+      }
+
+      case 'BATTLE_START': {
+        this.startBattlePhase();
+        break;
+      }
     }
   }
 
@@ -1993,6 +2289,9 @@ class TowerWarsGame {
 
     // Sync initial speed choice
     this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+
+    // Start 60-second preparation phase with character / deck selection
+    this.startPreparationPhase();
   }
 
   getCanvasMousePos(e, applyCamera = true) {
@@ -2256,6 +2555,14 @@ class TowerWarsGame {
       clearLogBtn.addEventListener('click', () => {
         const battleLog = document.getElementById('battle-log');
         if (battleLog) battleLog.innerHTML = '';
+      });
+    }
+
+    // Preparation Phase Ready Button Listener
+    const btnReady = document.getElementById('btn-player-ready');
+    if (btnReady) {
+      btnReady.addEventListener('click', () => {
+        this.toggleReady();
       });
     }
 

@@ -73,11 +73,46 @@ const BALANCE = {
     return 0.1;
   },
 
-  // Towers hierarchy strictly from spreadsheet
+  // 4 Playable Races with Unique Tower Archetypes
+  CHARACTERS: [
+    {
+      id: 'humans',
+      name: '🛡 Люди (Стражи)',
+      icon: '🛡',
+      badge: 'Ближний бой',
+      desc: 'Сокрушительный урон x2 в ближнем бою (Радиус: 2.0).'
+    },
+    {
+      id: 'elves',
+      name: '🌙 Эльфы (Лучники)',
+      icon: '🌙',
+      badge: 'Мультишот',
+      desc: 'Залповая стрельба по 2–5 целям одновременно.'
+    },
+    {
+      id: 'murlocs',
+      name: '🐟 Мурлоки (Глубины)',
+      icon: '🐟',
+      badge: 'Замедление',
+      desc: 'Замедление скорости крипов от -10% до -35% при каждой атаке.'
+    },
+    {
+      id: 'trolls',
+      name: '🏹 Тролли (Вуду)',
+      icon: '🏹',
+      badge: 'Срез брони + Яд',
+      desc: 'Снижение брони цели до -6 + постоянный периодический яд.'
+    }
+  ],
+
+  // Towers hierarchy: Neutral Line + 4 Racial Branching Trees
   TOWERS: [
+    // --- NEUTRAL / STANDARD LINE ---
     {
       id: 'tower_base',
       name: 'Базовая вышка',
+      tierLevel: 0,
+      race: 'neutral',
       cost: 10,
       damage: 10,
       range: 8.0,
@@ -85,7 +120,6 @@ const BALANCE = {
       critChance: 0,
       critMultiplier: 1.0,
       color: '#38bdf8',
-      type: 'direct',
       desc: 'Начальная вышка (Цена: 10, Урон: 10).',
       upgradeId: 'tower_lvl0',
       upgradeCost: 40
@@ -93,6 +127,8 @@ const BALANCE = {
     {
       id: 'tower_lvl0',
       name: 'Башня Т0 (Стрелковая)',
+      tierLevel: 0,
+      race: 'neutral',
       cost: 50,
       damage: 40,
       range: 9.0,
@@ -100,7 +136,6 @@ const BALANCE = {
       critChance: 0,
       critMultiplier: 1.0,
       color: '#0ea5e9',
-      type: 'direct',
       desc: 'Башня 0 уровня (Цена: 50, Урон: 40).',
       upgradeId: 'tower_lvl1',
       upgradeCost: 150
@@ -108,6 +143,8 @@ const BALANCE = {
     {
       id: 'tower_lvl1',
       name: 'Башня Т1 (Улучшенная)',
+      tierLevel: 1,
+      race: 'neutral',
       cost: 200,
       damage: 100,
       range: 10.0,
@@ -115,7 +152,6 @@ const BALANCE = {
       critChance: 0,
       critMultiplier: 1.0,
       color: '#3b82f6',
-      type: 'direct',
       desc: 'Башня 1 уровня (Цена: 200, Урон: 100).',
       upgradeId: 'tower_lvl2',
       upgradeCost: 300
@@ -123,6 +159,8 @@ const BALANCE = {
     {
       id: 'tower_lvl2',
       name: 'Башня Т2 (Критическая)',
+      tierLevel: 2,
+      race: 'neutral',
       cost: 500,
       damage: 250,
       range: 11.0,
@@ -130,7 +168,6 @@ const BALANCE = {
       critChance: 0.20,
       critMultiplier: 2.0,
       color: '#a855f7',
-      type: 'direct',
       desc: 'Башня 2 уровня (Цена: 500, Урон: 250, 20% Crit x2).',
       upgradeId: 'tower_lvl3',
       upgradeCost: 500
@@ -138,6 +175,8 @@ const BALANCE = {
     {
       id: 'tower_lvl3',
       name: 'Башня Т3 (Мастерская)',
+      tierLevel: 3,
+      race: 'neutral',
       cost: 1000,
       damage: 550,
       range: 12.0,
@@ -145,7 +184,6 @@ const BALANCE = {
       critChance: 0.30,
       critMultiplier: 2.0,
       color: '#ec4899',
-      type: 'direct',
       desc: 'Башня 3 уровня (Цена: 1000, Урон: 550, 30% Crit x2).',
       upgradeId: 'tower_lvl4',
       upgradeCost: 1500
@@ -153,6 +191,8 @@ const BALANCE = {
     {
       id: 'tower_lvl4',
       name: 'Башня Т4 (Эпическая)',
+      tierLevel: 4,
+      race: 'neutral',
       cost: 2500,
       damage: 950,
       range: 13.0,
@@ -160,12 +200,384 @@ const BALANCE = {
       critChance: 0.30,
       critMultiplier: 2.0,
       color: '#eab308',
-      type: 'direct',
       desc: 'Башня 4 уровня (Цена: 2500, Урон: 950, 30% Crit x2).',
+      upgradeId: null,
+      upgradeCost: 0
+    },
+
+    // --- 🛡 HUMANS RACIAL TREE (Melee Cleave, Range = 2.0, Damage x2.0) ---
+    {
+      id: 'human_t0',
+      name: '🛡 Страж пехотинец Т0',
+      tierLevel: 0,
+      race: 'humans',
+      cost: 50,
+      damage: 80,
+      range: 2.0,
+      attackSpeed: 0.8,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#f59e0b',
+      desc: 'Ближний бой (Радиус: 2.0, Урон x2: 80).',
+      upgradeId: 'human_t1',
+      upgradeCost: 150
+    },
+    {
+      id: 'human_t1',
+      name: '🛡 Рыцарь мечник Т1',
+      tierLevel: 1,
+      race: 'humans',
+      cost: 200,
+      damage: 200,
+      range: 2.0,
+      attackSpeed: 0.75,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#f59e0b',
+      desc: 'Ближний бой (Радиус: 2.0, Урон x2: 200).',
+      upgradeId: 'human_t2',
+      upgradeCost: 300
+    },
+    {
+      id: 'human_t2',
+      name: '🛡 Капитан гвардии Т2',
+      tierLevel: 2,
+      race: 'humans',
+      cost: 500,
+      damage: 500,
+      range: 2.0,
+      attackSpeed: 0.7,
+      critChance: 0.20,
+      critMultiplier: 2.0,
+      color: '#fbbf24',
+      desc: 'Ближний бой (Радиус: 2.0, Урон x2: 500, 20% Крит).',
+      upgradeId: 'human_t3',
+      upgradeCost: 500
+    },
+    {
+      id: 'human_t3',
+      name: '🛡 Паладин Света Т3',
+      tierLevel: 3,
+      race: 'humans',
+      cost: 1000,
+      damage: 1100,
+      range: 2.0,
+      attackSpeed: 0.65,
+      critChance: 0.30,
+      critMultiplier: 2.0,
+      color: '#fde047',
+      desc: 'Ближний бой (Радиус: 2.0, Урон x2: 1100, 30% Крит).',
+      upgradeId: 'human_t4',
+      upgradeCost: 1500
+    },
+    {
+      id: 'human_t4',
+      name: '🛡 Великий Маршал Т4',
+      tierLevel: 4,
+      race: 'humans',
+      cost: 2500,
+      damage: 1900,
+      range: 2.0,
+      attackSpeed: 0.6,
+      critChance: 0.30,
+      critMultiplier: 2.5,
+      color: '#fef08a',
+      desc: 'Ближний бой (Радиус: 2.0, Урон x2: 1900, 30% Крит x2.5).',
+      upgradeId: null,
+      upgradeCost: 0
+    },
+
+    // --- 🌙 ELVES RACIAL TREE (Multi-Shot: 2 to 5 targets) ---
+    {
+      id: 'elf_t0',
+      name: '🌙 Лучная башня Т0',
+      tierLevel: 0,
+      race: 'elves',
+      cost: 50,
+      damage: 22,
+      multishot: 2,
+      range: 9.0,
+      attackSpeed: 0.8,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#8b5cf6',
+      desc: 'Мультишот: 2 цели (Урон 22).',
+      upgradeId: 'elf_t1',
+      upgradeCost: 150
+    },
+    {
+      id: 'elf_t1',
+      name: '🌙 Страж рощи Т1',
+      tierLevel: 1,
+      race: 'elves',
+      cost: 200,
+      damage: 45,
+      multishot: 3,
+      range: 10.0,
+      attackSpeed: 0.75,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#a855f7',
+      desc: 'Мультишот: 3 цели (Урон 45).',
+      upgradeId: 'elf_t2',
+      upgradeCost: 300
+    },
+    {
+      id: 'elf_t2',
+      name: '🌙 Лунная охотница Т2',
+      tierLevel: 2,
+      race: 'elves',
+      cost: 500,
+      damage: 110,
+      multishot: 3,
+      range: 11.0,
+      attackSpeed: 0.7,
+      critChance: 0.15,
+      critMultiplier: 2.0,
+      color: '#c084fc',
+      desc: 'Мультишот: 3 цели (Урон 110, 15% Крит).',
+      upgradeId: 'elf_t3',
+      upgradeCost: 500
+    },
+    {
+      id: 'elf_t3',
+      name: '🌙 Древо мудрости Т3',
+      tierLevel: 3,
+      race: 'elves',
+      cost: 1000,
+      damage: 180,
+      multishot: 4,
+      range: 12.0,
+      attackSpeed: 0.65,
+      critChance: 0.20,
+      critMultiplier: 2.0,
+      color: '#e879f9',
+      desc: 'Мультишот: 4 цели (Урон 180, 20% Крит).',
+      upgradeId: 'elf_t4',
+      upgradeCost: 1500
+    },
+    {
+      id: 'elf_t4',
+      name: '🌙 Звездопад Элуны Т4',
+      tierLevel: 4,
+      race: 'elves',
+      cost: 2500,
+      damage: 260,
+      multishot: 5,
+      range: 13.0,
+      attackSpeed: 0.6,
+      critChance: 0.25,
+      critMultiplier: 2.5,
+      color: '#f472b6',
+      desc: 'Мультишот: 5 целей (Урон 260, 25% Крит x2.5).',
+      upgradeId: null,
+      upgradeCost: 0
+    },
+
+    // --- 🐟 MURLOCS RACIAL TREE (Slow -10% to -35%) ---
+    {
+      id: 'murloc_t0',
+      name: '🐟 Мурлок плеватель Т0',
+      tierLevel: 0,
+      race: 'murlocs',
+      cost: 50,
+      damage: 30,
+      slowPercent: 0.10,
+      range: 9.0,
+      attackSpeed: 0.8,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#06b6d4',
+      desc: 'Замедление: -10% скорости (Урон 30).',
+      upgradeId: 'murloc_t1',
+      upgradeCost: 150
+    },
+    {
+      id: 'murloc_t1',
+      name: '🐟 Мурлок ловец Т1',
+      tierLevel: 1,
+      race: 'murlocs',
+      cost: 200,
+      damage: 75,
+      slowPercent: 0.15,
+      range: 10.0,
+      attackSpeed: 0.75,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#0891b2',
+      desc: 'Замедление: -15% скорости (Урон 75).',
+      upgradeId: 'murloc_t2',
+      upgradeCost: 300
+    },
+    {
+      id: 'murloc_t2',
+      name: '🐟 Морской оракул Т2',
+      tierLevel: 2,
+      race: 'murlocs',
+      cost: 500,
+      damage: 190,
+      slowPercent: 0.20,
+      range: 11.0,
+      attackSpeed: 0.7,
+      critChance: 0.15,
+      critMultiplier: 2.0,
+      color: '#22d3ee',
+      desc: 'Замедление: -20% скорости (Урон 190, 15% Крит).',
+      upgradeId: 'murloc_t3',
+      upgradeCost: 500
+    },
+    {
+      id: 'murloc_t3',
+      name: '🐟 Глубоководный шаман Т3',
+      tierLevel: 3,
+      race: 'murlocs',
+      cost: 1000,
+      damage: 420,
+      slowPercent: 0.25,
+      range: 12.0,
+      attackSpeed: 0.65,
+      critChance: 0.20,
+      critMultiplier: 2.0,
+      color: '#38bdf8',
+      desc: 'Замедление: -25% скорости (Урон 420, 20% Крит).',
+      upgradeId: 'murloc_t4',
+      upgradeCost: 1500
+    },
+    {
+      id: 'murloc_t4',
+      name: '🐟 Владыка глубин Т4',
+      tierLevel: 4,
+      race: 'murlocs',
+      cost: 2500,
+      damage: 720,
+      slowPercent: 0.35,
+      range: 13.0,
+      attackSpeed: 0.6,
+      critChance: 0.25,
+      critMultiplier: 2.5,
+      color: '#67e8f9',
+      desc: 'Замедление: -35% скорости (Урон 720, 25% Крит x2.5).',
+      upgradeId: null,
+      upgradeCost: 0
+    },
+
+    // --- 🏹 TROLLS RACIAL TREE (Armor Shred -1..-6 + Poison DoT) ---
+    {
+      id: 'troll_t0',
+      name: '🏹 Метатель копий Т0',
+      tierLevel: 0,
+      race: 'trolls',
+      cost: 50,
+      damage: 30,
+      armorShred: 1,
+      poisonDps: 4,
+      range: 9.0,
+      attackSpeed: 0.8,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#10b981',
+      desc: 'Срез брони: -1 + Яд 4/с (Урон 30).',
+      upgradeId: 'troll_t1',
+      upgradeCost: 150
+    },
+    {
+      id: 'troll_t1',
+      name: '🏹 Тролль берсерк Т1',
+      tierLevel: 1,
+      race: 'trolls',
+      cost: 200,
+      damage: 75,
+      armorShred: 2,
+      poisonDps: 10,
+      range: 10.0,
+      attackSpeed: 0.75,
+      critChance: 0,
+      critMultiplier: 1.0,
+      color: '#059669',
+      desc: 'Срез брони: -2 + Яд 10/с (Урон 75).',
+      upgradeId: 'troll_t2',
+      upgradeCost: 300
+    },
+    {
+      id: 'troll_t2',
+      name: '🏹 Знахарь Вуду Т2',
+      tierLevel: 2,
+      race: 'trolls',
+      cost: 500,
+      damage: 190,
+      armorShred: 3,
+      poisonDps: 25,
+      range: 11.0,
+      attackSpeed: 0.7,
+      critChance: 0.15,
+      critMultiplier: 2.0,
+      color: '#34d399',
+      desc: 'Срез брони: -3 + Яд 25/с (Урон 190, 15% Крит).',
+      upgradeId: 'troll_t3',
+      upgradeCost: 500
+    },
+    {
+      id: 'troll_t3',
+      name: '🏹 Ловец теней Т3',
+      tierLevel: 3,
+      race: 'trolls',
+      cost: 1000,
+      damage: 420,
+      armorShred: 4,
+      poisonDps: 60,
+      range: 12.0,
+      attackSpeed: 0.65,
+      critChance: 0.20,
+      critMultiplier: 2.0,
+      color: '#6ee7b7',
+      desc: 'Срез брони: -4 + Яд 60/с (Урон 420, 20% Крит).',
+      upgradeId: 'troll_t4',
+      upgradeCost: 1500
+    },
+    {
+      id: 'troll_t4',
+      name: '🏹 Вождь племени Вуду Т4',
+      tierLevel: 4,
+      race: 'trolls',
+      cost: 2500,
+      damage: 720,
+      armorShred: 6,
+      poisonDps: 150,
+      range: 13.0,
+      attackSpeed: 0.6,
+      critChance: 0.25,
+      critMultiplier: 2.5,
+      color: '#a7f3d0',
+      desc: 'Срез брони: -6 + Яд 150/с (Урон 720, 25% Крит x2.5).',
       upgradeId: null,
       upgradeCost: 0
     }
   ],
+
+  // Helper mapping: get corresponding racial upgrade target for a tower
+  getRacialUpgrade(towerDef, raceId) {
+    if (!towerDef || !raceId) return null;
+    let targetPrefix = '';
+    if (raceId === 'humans') targetPrefix = 'human_t';
+    else if (raceId === 'elves') targetPrefix = 'elf_t';
+    else if (raceId === 'murlocs') targetPrefix = 'murloc_t';
+    else if (raceId === 'trolls') targetPrefix = 'troll_t';
+    else return null;
+
+    // If it's a neutral tower:
+    if (towerDef.id === 'tower_base') return BALANCE.TOWERS.find(t => t.id === `${targetPrefix}0`);
+    if (towerDef.id === 'tower_lvl0') return BALANCE.TOWERS.find(t => t.id === `${targetPrefix}1`);
+    if (towerDef.id === 'tower_lvl1') return BALANCE.TOWERS.find(t => t.id === `${targetPrefix}2`);
+    if (towerDef.id === 'tower_lvl2') return BALANCE.TOWERS.find(t => t.id === `${targetPrefix}3`);
+    if (towerDef.id === 'tower_lvl3') return BALANCE.TOWERS.find(t => t.id === `${targetPrefix}4`);
+
+    // If it's already a racial tower of the same race:
+    if (towerDef.race === raceId && towerDef.upgradeId) {
+      return BALANCE.TOWERS.find(t => t.id === towerDef.upgradeId);
+    }
+
+    return null;
+  },
 
   TIER_UPGRADE_COSTS: [1200, 8000],
 
