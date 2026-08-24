@@ -337,7 +337,6 @@ button {
   color: var(--gold);
 }
 
-/* CARD DETAILS */
 .selected-entity-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -346,6 +345,22 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 180px;
+}
+
+.upgrade-diff {
+  display: none;
+  color: #10b981;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+#card-details.show-upgrade-preview .upgrade-diff {
+  display: inline;
+}
+
+#card-details.show-upgrade-preview .stat-cur-val {
+  color: #94a3b8;
 }
 
 .card-header {

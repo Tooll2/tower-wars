@@ -1212,71 +1212,70 @@ class TowerWarsGame {
     `;
   }
 
-  showTowerInspectCard(towerDef, instance = null, isUpgradePreview = false) {
+  showTowerInspectCard(towerDef, instance = null) {
     const title = document.getElementById('card-title');
     const tag = document.getElementById('card-type-tag');
     if (title) title.innerText = towerDef.name;
-    if (tag) tag.innerText = `Цена: 🪙${towerDef.cost}`;
+    if (tag) tag.innerText = instance ? `Ур. ${(instance.level || 0) + 1}` : `Цена: 🪙${towerDef.cost}`;
 
     const details = document.getElementById('card-details');
     const actions = document.getElementById('card-actions');
     if (!details) return;
+
+    details.classList.remove('show-upgrade-preview');
 
     let nextDef = null;
     if (instance && instance.def && instance.def.upgradeId) {
       nextDef = BALANCE.TOWERS.find(t => t.id === instance.def.upgradeId);
     }
 
-    let html = '';
+    const curDef = instance ? instance.def : towerDef;
 
-    if (isUpgradePreview && nextDef) {
-      const curDef = instance.def;
+    let dmgDiffHtml = '';
+    let spdDiffHtml = '';
+    let rngDiffHtml = '';
+    let critDiffHtml = '';
+
+    if (nextDef) {
       const dmgDiff = nextDef.damage - curDef.damage;
       const spdDiff = Number((curDef.attackSpeed - nextDef.attackSpeed).toFixed(2));
       const rngDiff = Number((nextDef.range - curDef.range).toFixed(1));
       const critChanceDiff = Math.round((nextDef.critChance - curDef.critChance) * 100);
 
-      html += `
-        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; font-size: 0.74rem; color: #10b981; text-align: center; font-weight: 700;">
-          ⚡ Предпросмотр: «${nextDef.name}»
-        </div>
-        <div class="stat-row">
-          <span>Урон за выстрел:</span>
-          <span>${curDef.damage} ➜ <b style="color:#10b981;">${nextDef.damage} (+${dmgDiff})</b></span>
-        </div>
-        <div class="stat-row">
-          <span>Скорость атаки:</span>
-          <span>${curDef.attackSpeed}s ➜ <b style="color:#10b981;">${nextDef.attackSpeed}s (${spdDiff > 0 ? 'быстрее на ' + spdDiff + 's' : '0s'})</b></span>
-        </div>
-        <div class="stat-row">
-          <span>Радиус поражения:</span>
-          <span>${curDef.range} ➜ <b style="color:#10b981;">${nextDef.range} (+${rngDiff})</b></span>
-        </div>
-      `;
-
+      dmgDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.damage} (+${dmgDiff})</span>`;
+      spdDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.attackSpeed}s (${spdDiff > 0 ? '-' + spdDiff + 's' : '0s'})</span>`;
+      rngDiffHtml = `<span class="upgrade-diff">➜ ${nextDef.range} (+${rngDiff})</span>`;
       if (nextDef.critChance > 0 || curDef.critChance > 0) {
-        html += `
-          <div class="stat-row">
-            <span>Критический урон:</span>
-            <span>${Math.round(curDef.critChance * 100)}% ➜ <b style="color:#10b981;">${Math.round(nextDef.critChance * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</b></span>
-          </div>
-        `;
+        critDiffHtml = `<span class="upgrade-diff">➜ ${Math.round(nextDef.critChance * 100)}% (${critChanceDiff >= 0 ? '+' + critChanceDiff : critChanceDiff}%)</span>`;
       }
-
-      html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px;">${nextDef.desc}</p>`;
-    } else {
-      html += `
-        <div class="stat-row"><span>Урон за выстрел:</span><span>${towerDef.damage} ед.</span></div>
-        <div class="stat-row"><span>Скорость атаки:</span><span>${towerDef.attackSpeed} сек</span></div>
-        <div class="stat-row"><span>Радиус поражения:</span><span>${towerDef.range} клеток (${towerDef.range / 2} башен)</span></div>
-      `;
-
-      if (towerDef.critChance > 0) {
-        html += `<div class="stat-row"><span>Критический урон:</span><span style="color:#ec4899">${Math.round(towerDef.critChance * 100)}% x${towerDef.critMultiplier} (${towerDef.damage * towerDef.critMultiplier})</span></div>`;
-      }
-
-      html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px;">${towerDef.desc}</p>`;
     }
+
+    let html = `
+      <div class="stat-row">
+        <span>Урон за выстрел:</span>
+        <span><span class="stat-cur-val">${curDef.damage} ед.</span>${dmgDiffHtml}</span>
+      </div>
+      <div class="stat-row">
+        <span>Скорость атаки:</span>
+        <span><span class="stat-cur-val">${curDef.attackSpeed} сек</span>${spdDiffHtml}</span>
+      </div>
+      <div class="stat-row">
+        <span>Радиус поражения:</span>
+        <span><span class="stat-cur-val">${curDef.range} кл.</span>${rngDiffHtml}</span>
+      </div>
+    `;
+
+    if (curDef.critChance > 0 || (nextDef && nextDef.critChance > 0)) {
+      const curCrit = Math.round(curDef.critChance * 100);
+      html += `
+        <div class="stat-row">
+          <span>Критический урон:</span>
+          <span><span class="stat-cur-val" style="color:#ec4899">${curCrit}% x${curDef.critMultiplier}</span>${critDiffHtml}</span>
+        </div>
+      `;
+    }
+
+    html += `<p style="font-size: 0.72rem; color: #94a3b8; margin-top: 6px; line-height: 1.3;">${curDef.desc}</p>`;
 
     if (instance) {
       html += `
@@ -1288,7 +1287,7 @@ class TowerWarsGame {
         actions.style.display = 'flex';
         const upBtn = document.getElementById('btn-upgrade-tower');
         if (upBtn) {
-          if (towerDef.upgradeId) {
+          if (towerDef.upgradeId && nextDef) {
             upBtn.style.display = 'block';
             upBtn.innerText = `Апгрейд (🪙 ${towerDef.upgradeCost})`;
             upBtn.onclick = () => {
@@ -1297,11 +1296,17 @@ class TowerWarsGame {
             };
             upBtn.onmouseenter = () => {
               this.previewUpgradeTower = nextDef;
-              this.showTowerInspectCard(towerDef, instance, true);
+              const d = document.getElementById('card-details');
+              if (d) d.classList.add('show-upgrade-preview');
+              const t = document.getElementById('card-type-tag');
+              if (t) t.innerText = `➜ ${nextDef.name}`;
             };
             upBtn.onmouseleave = () => {
               this.previewUpgradeTower = null;
-              this.showTowerInspectCard(towerDef, instance, false);
+              const d = document.getElementById('card-details');
+              if (d) d.classList.remove('show-upgrade-preview');
+              const t = document.getElementById('card-type-tag');
+              if (t) t.innerText = `Ур. ${(instance.level || 0) + 1}`;
             };
           } else {
             upBtn.style.display = 'none';
@@ -1766,8 +1771,16 @@ class TowerWarsGame {
       const scaleY = this.canvas.height / rect.height;
       const mx = (e.clientX - rect.left) * scaleX;
       const my = (e.clientY - rect.top) * scaleY;
-      this.mouseGridPos.x = Math.floor(mx / this.cellSize);
-      this.mouseGridPos.y = Math.floor(my / this.cellSize);
+
+      // 2x2 tower placement: centered symmetrically under the cursor
+      this.mouseGridPos.x = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
+      this.mouseGridPos.y = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
+
+      // 1x1 grid cell coordinates for selecting/clicking existing objects
+      this.rawMouseGridPos = {
+        x: Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize))),
+        y: Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)))
+      };
       this.isHoveringCanvas = true;
     });
 
@@ -1806,10 +1819,10 @@ class TowerWarsGame {
       this.sound.init();
       if (this.activeLane !== 'player') return;
 
-      const gx = this.mouseGridPos.x;
-      const gy = this.mouseGridPos.y;
+      const rawGx = this.rawMouseGridPos ? this.rawMouseGridPos.x : Math.floor(this.mouseGridPos.x);
+      const rawGy = this.rawMouseGridPos ? this.rawMouseGridPos.y : Math.floor(this.mouseGridPos.y);
 
-      const existingTower = this.player.grid[gy] && this.player.grid[gy][gx];
+      const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
       if (existingTower) {
         this.selectedEntity = existingTower;
         this.clearBuildSelection();
@@ -1818,9 +1831,11 @@ class TowerWarsGame {
       }
 
       if (this.selectedTowerToBuild) {
-        const success = this.placeTower(this.player, gx, gy, this.selectedTowerToBuild, true, true);
+        const buildGx = this.mouseGridPos.x;
+        const buildGy = this.mouseGridPos.y;
+        const success = this.placeTower(this.player, buildGx, buildGy, this.selectedTowerToBuild, true, true);
         if (success) {
-          this.selectedEntity = this.player.grid[gy][gx];
+          this.selectedEntity = this.player.grid[buildGy][buildGx];
           this.previewUpgradeTower = null;
           this.showTowerInspectCard(this.selectedTowerToBuild, this.selectedEntity);
         } else {
