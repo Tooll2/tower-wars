@@ -825,14 +825,90 @@ button {
 
 .map-cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
+  .map-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
   .map-cards-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Architect Custom Wall Blocks Panel */
+.architect-block-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.architect-block-item:hover {
+  background: #273549;
+  border-color: #f97316;
+}
+
+.architect-block-item.selected {
+  background: rgba(249, 115, 22, 0.18);
+  border-color: #f97316;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+}
+
+.architect-block-item.placed {
+  opacity: 0.4;
+  border-style: dashed;
+  pointer-events: none;
+  filter: grayscale(1);
+}
+
+.architect-block-icon {
+  font-size: 1.1rem;
+  width: 24px;
+  text-align: center;
+  color: #f97316;
+}
+
+.architect-block-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.architect-block-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.architect-block-dim {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.architect-status-banner {
+  background: rgba(249, 115, 22, 0.15);
+  border: 1px solid #f97316;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: #fdba74;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .map-card-rich {

@@ -127,8 +127,91 @@ const BALANCE = {
         { x: 64, y: 33 },
         { x: 64, y: 5 }
       ]
+    },
+    {
+      id: 'custom',
+      name: '🛠️ Кастом (Архитектор)',
+      icon: '🛠️',
+      badge: '10 блоков сопернику',
+      tagColor: '#f97316',
+      desc: 'Построй лабиринт из 10 случайных блоков стен на поле соперника за 3 минуты и сломай ему тайминги!',
+      prepTimeSec: 180,
+      isCustom: true,
+      walls: [], // Заполняются динамически игроками
+      zones: [
+        { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 59, y: 55, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 0, y: 55, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
+      ],
+      waypointCoords: [
+        { x: 69, y: 65 },
+        { x: 69, y: 0 },
+        { x: 0, y: 0 },
+        { x: 0, y: 65 }
+      ]
     }
   ],
+
+  // 40 Unique Wall Blocks Catalog for Custom Architect Mode
+  CUSTOM_BLOCK_CATALOG: [
+    // 1. Vertical Strips (10 items)
+    { id: 'v_2x6', name: 'Узкий столб 2×6', w: 2, h: 6, icon: '▮', category: 'strip' },
+    { id: 'v_2x10', name: 'Стена 2×10', w: 2, h: 10, icon: '▮', category: 'strip' },
+    { id: 'v_2x14', name: 'Длинная стена 2×14', w: 2, h: 14, icon: '▮', category: 'strip' },
+    { id: 'v_2x18', name: 'Высокая стена 2×18', w: 2, h: 18, icon: '▮', category: 'strip' },
+    { id: 'v_2x22', name: 'Барьер 2×22', w: 2, h: 22, icon: '▮', category: 'strip' },
+    { id: 'v_4x8', name: 'Пилон 4×8', w: 4, h: 8, icon: '▍', category: 'strip' },
+    { id: 'v_4x12', name: 'Бастион 4×12', w: 4, h: 12, icon: '▍', category: 'strip' },
+    { id: 'v_4x16', name: 'Монолит 4×16', w: 4, h: 16, icon: '▍', category: 'strip' },
+    { id: 'v_4x20', name: 'Гряда 4×20', w: 4, h: 20, icon: '▍', category: 'strip' },
+    { id: 'v_6x14', name: 'Скала 6×14', w: 6, h: 14, icon: '▋', category: 'strip' },
+
+    // 2. Horizontal Barriers (10 items)
+    { id: 'h_6x2', name: 'Планка 6×2', w: 6, h: 2, icon: '▬', category: 'barrier' },
+    { id: 'h_10x2', name: 'Перегородка 10×2', w: 10, h: 2, icon: '▬', category: 'barrier' },
+    { id: 'h_14x2', name: 'Длинная планка 14×2', w: 14, h: 2, icon: '▬', category: 'barrier' },
+    { id: 'h_18x2', name: 'Широкий барьер 18×2', w: 18, h: 2, icon: '▬', category: 'barrier' },
+    { id: 'h_22x2', name: 'Заслон 22×2', w: 22, h: 2, icon: '▬', category: 'barrier' },
+    { id: 'h_8x4', name: 'Платформа 8×4', w: 8, h: 4, icon: '▀', category: 'barrier' },
+    { id: 'h_12x4', name: 'Вал 12×4', w: 12, h: 4, icon: '▀', category: 'barrier' },
+    { id: 'h_16x4', name: 'Редут 16×4', w: 16, h: 4, icon: '▀', category: 'barrier' },
+    { id: 'h_20x4', name: 'Форт-линия 20×4', w: 20, h: 4, icon: '▀', category: 'barrier' },
+    { id: 'h_14x6', name: 'Массив 14×6', w: 14, h: 6, icon: '⬛', category: 'barrier' },
+
+    // 3. Squares & Solid Blocks (10 items)
+    { id: 'sq_4x4', name: 'Квадрат 4×4', w: 4, h: 4, icon: '■', category: 'solid' },
+    { id: 'sq_6x6', name: 'Остров 6×6', w: 6, h: 6, icon: '■', category: 'solid' },
+    { id: 'sq_8x8', name: 'Крепость 8×8', w: 8, h: 8, icon: '■', category: 'solid' },
+    { id: 'sq_10x10', name: 'Цитадель-блок 10×10', w: 10, h: 10, icon: '■', category: 'solid' },
+    { id: 'sq_6x8', name: 'Обелиск 6×8', w: 6, h: 8, icon: '■', category: 'solid' },
+    { id: 'sq_8x6', name: 'Форт 8×6', w: 8, h: 6, icon: '■', category: 'solid' },
+    { id: 'sq_10x6', name: 'Бункер 10×6', w: 10, h: 6, icon: '■', category: 'solid' },
+    { id: 'sq_6x10', name: 'Башня-скала 6×10', w: 6, h: 10, icon: '■', category: 'solid' },
+    { id: 'sq_8x10', name: 'Монолит 8×10', w: 8, h: 10, icon: '■', category: 'solid' },
+    { id: 'sq_10x8', name: 'Твердыня 10×8', w: 10, h: 8, icon: '■', category: 'solid' },
+
+    // 4. Complex Formations (10 items)
+    { id: 'c_l_left', name: 'Уголок L (8×8)', w: 8, h: 8, icon: '⌐', category: 'complex', subBlocks: [{dx:0,dy:0,w:2,h:8},{dx:2,dy:6,w:6,h:2}] },
+    { id: 'c_l_right', name: 'Уголок R (8×8)', w: 8, h: 8, icon: '⌙', category: 'complex', subBlocks: [{dx:6,dy:0,w:2,h:8},{dx:0,dy:6,w:6,h:2}] },
+    { id: 'c_t_down', name: 'T-блок (10×6)', w: 10, h: 6, icon: '┳', category: 'complex', subBlocks: [{dx:0,dy:0,w:10,h:2},{dx:4,dy:2,w:2,h:4}] },
+    { id: 'c_t_up', name: 'Перевернутый T (10×6)', w: 10, h: 6, icon: '┻', category: 'complex', subBlocks: [{dx:0,dy:4,w:10,h:2},{dx:4,dy:0,w:2,h:4}] },
+    { id: 'c_cross', name: 'Крест (8×8)', w: 8, h: 8, icon: '➕', category: 'complex', subBlocks: [{dx:3,dy:0,w:2,h:8},{dx:0,dy:3,w:8,h:2}] },
+    { id: 'c_u_pocket', name: 'Карман U (8×6)', w: 8, h: 6, icon: '⊔', category: 'complex', subBlocks: [{dx:0,dy:0,w:2,h:6},{dx:6,dy:0,w:2,h:6},{dx:2,dy:4,w:4,h:2}] },
+    { id: 'c_z_step', name: 'Z-ступень (8×6)', w: 8, h: 6, icon: '⎍', category: 'complex', subBlocks: [{dx:0,dy:0,w:5,h:2},{dx:3,dy:2,w:2,h:2},{dx:3,dy:4,w:5,h:2}] },
+    { id: 'c_double_pillar', name: 'Два пилона (8×8)', w: 8, h: 8, icon: '⫴', category: 'complex', subBlocks: [{dx:0,dy:0,w:3,h:8},{dx:5,dy:0,w:3,h:8}] },
+    { id: 'c_diag_corner', name: 'Большой L-вал (10×10)', w: 10, h: 10, icon: '◰', category: 'complex', subBlocks: [{dx:0,dy:0,w:3,h:10},{dx:3,dy:7,w:7,h:3}] },
+    { id: 'c_h_gate', name: 'H-проход (10×8)', w: 10, h: 8, icon: '🈴', category: 'complex', subBlocks: [{dx:0,dy:0,w:3,h:8},{dx:7,dy:0,w:3,h:8},{dx:3,dy:3,w:4,h:2}] }
+  ],
+
+  getRandomCustomBlocks(count = 10) {
+    const shuffled = [...this.CUSTOM_BLOCK_CATALOG].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count).map((b, idx) => ({
+      ...b,
+      instanceId: `block_${idx}_${Date.now()}`,
+      placed: false
+    }));
+  },
 
   getMap(mapId) {
     return this.MAPS.find(m => m.id === mapId) || this.MAPS[0];
