@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shango 2D Tower Wars — PvP Prototype</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Rubik:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <!-- MQTT.js CDN for robust 100% unblocked global multiplayer messaging -->
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <div id="game-app">
+    <!-- Top HUD Header -->
+    <header id="top-bar">
+      <div class="brand">
+        <span class="game-logo">⚔️ SHANGO TOWER WARS</span>
+        <span id="game-mode-badge" class="badge" style="background:#10b981; color:#fff;">🌐 Онлайн 1v1 PvP</span>
+      </div>
+
+      <div class="stats-group">
+        <div class="stat-item gold-stat">
+          <span class="icon">🪙</span>
+          <div class="stat-content">
+            <span class="stat-label">ЗОЛОТО</span>
+            <span class="stat-val" id="player-gold">100</span>
+          </div>
+        </div>
+        <div class="stat-item income-stat">
+          <span class="icon">📈</span>
+          <div class="stat-content">
+            <span class="stat-label">ИНКОМ (<span id="income-timer">15s</span>)</span>
+            <span class="stat-val" id="player-income">+20</span>
+          </div>
+        </div>
+        <div class="stat-item lives-stat">
+          <span class="icon">❤️</span>
+          <div class="stat-content">
+            <span class="stat-label">ТВОЯ БАЗА</span>
+            <span class="stat-val" id="player-lives">50 / 50</span>
+          </div>
+        </div>
+        <div class="stat-item enemy-lives-stat">
+          <span class="icon">💀</span>
+          <div class="stat-content">
+            <span class="stat-label" id="enemy-label">БАЗА СОПЕРНИКА</span>
+            <span class="stat-val" id="enemy-lives">50 / 50</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-group">
+        <button id="btn-multiplayer" class="btn-mp">🌐 Создать / Войти в комнату</button>
+      </div>
+    </header>
+
+    <!-- Main Game Workspace -->
+    <main id="workspace">
+      <!-- Left Panel: Tower Construction -->
+      <aside id="build-panel" class="panel">
+        <div class="panel-header">
+          <h3>🔨 СТРОИТЕЛЬСТВО БАШЕН (2×2)</h3>
+          <span class="tip">ПКМ / Esc для отмены выбора</span>
+        </div>
+
+        <div class="tower-selector-list" id="tower-selector-list"></div>
+
+        <div class="selected-entity-card" id="selected-entity-card">
+          <div class="card-header">
+            <span id="card-title">Выберите объект</span>
+            <span id="card-type-tag" class="tag">Инфо</span>
+          </div>
+          <div class="card-body" id="card-details">
+            <p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>
+          </div>
+          <div class="card-actions" id="card-actions" style="display: none;">
+            <button id="btn-upgrade-tower" class="btn-action">Апгрейд</button>
+            <button id="btn-sell-tower" class="btn-danger">Продать (75%)</button>
+          </div>
+        </div>
+
+        <div class="battle-log-card">
+          <div class="log-header">
+            <span>📜 Журнал боя</span>
+            <button id="btn-clear-log">Очистить</button>
+          </div>
+          <div id="battle-log" class="log-body"></div>
+        </div>
+      </aside>
+
+      <!-- Center: Battlefields (Player Lane & Enemy Lane) -->
+      <section id="canvas-container">
+        <div class="lane-tabs">
+          <button id="tab-player-lane" class="tab-btn active">🛡 Твоя полоса (Лабиринт)</button>
+          <button id="tab-enemy-lane" class="tab-btn">⚔ Полоса соперника (Твои крипы)</button>
+          <div class="game-timer-box">Время: <span id="game-time">00:00</span></div>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="game-canvas" width="840" height="792"></canvas>
+          
+          <!-- Victory / Defeat Overlay -->
+          <div id="canvas-overlay-msg" class="overlay-msg hidden">
+            <div class="msg-box">
+              <h2 id="overlay-title">ПОБЕДА!</h2>
+              <p id="overlay-desc">База противника уничтожена!</p>
+              <button id="overlay-btn-restart" class="btn-action">Играть снова</button>
+            </div>
+          </div>
+
+          <!-- Multiplayer Modal Overlay -->
+          <div id="mp-modal" class="overlay-msg hidden">
+            <div class="mp-box">
+              <div class="mp-header">
+                <h2>🌐 Сетевая игра 1v1 (Онлайн)</h2>
+                <button id="mp-btn-close" class="mp-close-btn">&times;</button>
+              </div>
+
+              <div class="mp-tabs">
+                <button id="mp-tab-host" class="mp-tab active">👑 Создать комнату (Хост)</button>
+                <button id="mp-tab-join" class="mp-tab">🎮 Войти по коду (Клиент)</button>
+              </div>
+
+              <!-- Host Tab Content -->
+              <div id="mp-view-host" class="mp-view">
+                <p class="mp-desc">Нажмите кнопку, чтобы получить 4-значный номер комнаты:</p>
+                <button id="mp-btn-create-room" class="btn-action mp-full-btn">Сгенерировать код комнаты</button>
+                
+                <div id="mp-host-code-box" class="mp-code-box hidden">
+                  <span class="mp-code-label">ВАШ КОД КОМНАТЫ:</span>
+                  <div class="mp-code-row">
+                    <span id="mp-host-code" class="mp-code-text">------</span>
+                    <button id="mp-btn-copy-code" class="btn-secondary">📋 Скопировать</button>
+                  </div>
+                  <div class="mp-status-spinner">
+                    <span class="pulse-dot"></span>
+                    <span id="mp-host-status">Ожидание входа второго игрока...</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Join Tab Content -->
+              <div id="mp-view-join" class="mp-view hidden">
+                <p class="mp-desc">Введите 4-значный номер комнаты, который вам дал друг:</p>
+                <div class="mp-input-group">
+                  <input type="text" id="mp-join-input" placeholder="Например: 7492" maxlength="8">
+                  <button id="mp-btn-connect" class="btn-action">Присоединиться</button>
+                </div>
+                <p id="mp-join-status" class="mp-status-msg"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="canvas-toolbar">
+          <span class="info-tag">Сетка: 70×66 кл | 4 контрольные точки</span>
+          <div class="quick-tips">
+            <span>💡 ПКМ / Escape — отменить выбор башни.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: Creep Spawning (12 buttons) -->
+      <aside id="creep-panel" class="panel">
+        <div class="panel-header">
+          <div class="tier-info">
+            <h3>👾 ПРИЗЫВ КРИПОВ</h3>
+            <span class="tier-badge" id="current-tier-badge">ТИР 1</span>
+          </div>
+          <span class="tip">Отправка крипа дает постоянный инком!</span>
+        </div>
+
+        <div class="creep-grid" id="creep-buttons-grid"></div>
+
+        <div class="creep-info-box" id="creep-hover-info">
+          <h4>Характеристики юнита</h4>
+          <div id="creep-hover-details">
+            <p class="placeholder-text">Наведите на кнопку крипа для детального расчета брони, HP и окупаемости.</p>
+          </div>
+        </div>
+
+        <div class="mechanics-reminder">
+          <div class="reminder-item">
+            <span class="rm-icon">⏱</span>
+            <span>Заряды копятся до 10 шт. (1-2: 10с, 3-7: 15с, 8-11: 20с)</span>
+          </div>
+          <div class="reminder-item">
+            <span class="rm-icon">🛡</span>
+            <span>Броня снижает урон по формуле: \(P \approx 6 \cdot Броня^{0.25}\)</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="balance.js"></script>
+  <script src="pathfinding.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
