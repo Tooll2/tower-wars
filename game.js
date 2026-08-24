@@ -101,11 +101,17 @@ class TowerWarsGame {
     this.selectedTowerToBuild = BALANCE.TOWERS[0];
     this.selectedEntity = null;
     this.previewUpgradeTower = null;
+    this.hoverPreviewGuidePath = null;
+    this.lastHoverGx = -1;
+    this.lastHoverGy = -1;
     this.mouseGridPos = { x: -1, y: -1 };
     this.isHoveringCanvas = false;
 
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
+
+    this.recalculateCreepPaths(this.player);
+    this.recalculateCreepPaths(this.enemy);
 
     this.initUI();
     this.bindEvents();
@@ -132,6 +138,9 @@ class TowerWarsGame {
   clearBuildSelection() {
     this.selectedTowerToBuild = null;
     this.previewUpgradeTower = null;
+    this.hoverPreviewGuidePath = null;
+    this.lastHoverGx = -1;
+    this.lastHoverGy = -1;
     this.canvas.style.cursor = 'default';
     this.renderTowerSelector();
   }
@@ -253,6 +262,11 @@ class TowerWarsGame {
   }
 
   recalculateCreepPaths(agent) {
+    agent.guidePath = this.pathfinder.findMultiWaypointPath(
+      BALANCE.MAP.WAYPOINT_COORDS,
+      (x, y) => this.isCellBlocked(agent, x, y)
+    );
+
     for (const creep of agent.creeps) {
       const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
       const remainingPoints = [curPos];
@@ -869,18 +883,37 @@ class TowerWarsGame {
     drawVibrantZone(wp2, '#a855f733', '#c084fc', '2️⃣'); // Checkpoint 2 (Top-Left)
     drawVibrantZone(ez, '#ef444433', '#f87171', '🏰');   // Exit Goal (Bottom-Left)
 
-    // 5. Waypoints Route Guide Dotted Lines
-    const route = BALANCE.MAP.WAYPOINT_COORDS;
-    ctx.strokeStyle = '#38bdf866';
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo((route[0].x + 0.5) * cs, (route[0].y + 0.5) * cs);
-    for (let i = 1; i < route.length; i++) {
-      ctx.lineTo((route[i].x + 0.5) * cs, (route[i].y + 0.5) * cs);
+    // 5. Dynamic Waypoints Route Guide (Animated Dotted Line following the actual path around towers)
+    const activeGuidePath = (this.activeLane === 'player' && this.hoverPreviewGuidePath)
+      ? this.hoverPreviewGuidePath
+      : (agent.guidePath || this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, (x, y) => this.isCellBlocked(agent, x, y)));
+
+    if (activeGuidePath && activeGuidePath.length > 1) {
+      // Glow underlay
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo((activeGuidePath[0].x + 0.5) * cs, (activeGuidePath[0].y + 0.5) * cs);
+      for (let i = 1; i < activeGuidePath.length; i++) {
+        ctx.lineTo((activeGuidePath[i].x + 0.5) * cs, (activeGuidePath[i].y + 0.5) * cs);
+      }
+      ctx.stroke();
+
+      // Animated marching dotted line
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      const animOffset = (this.gameTimeSeconds * 30) % 16;
+      ctx.lineDashOffset = -animOffset;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo((activeGuidePath[0].x + 0.5) * cs, (activeGuidePath[0].y + 0.5) * cs);
+      for (let i = 1; i < activeGuidePath.length; i++) {
+        ctx.lineTo((activeGuidePath[i].x + 0.5) * cs, (activeGuidePath[i].y + 0.5) * cs);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
 
     // 6. Towers
     for (const tower of agent.towers) {
@@ -1780,6 +1813,10 @@ class TowerWarsGame {
     this.updateHUD();
     this.recalculateEffectiveSpeed();
 
+    this.hoverPreviewGuidePath = null;
+    this.recalculateCreepPaths(this.player);
+    this.recalculateCreepPaths(this.enemy);
+
     // Sync initial speed choice
     this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
   }
@@ -1828,10 +1865,31 @@ class TowerWarsGame {
         y: Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)))
       };
       this.isHoveringCanvas = true;
+
+      // Real-time dynamic route preview when hovering a tower placement
+      if (this.activeLane === 'player' && this.selectedTowerToBuild) {
+        const buildGx = this.mouseGridPos.x;
+        const buildGy = this.mouseGridPos.y;
+        if (buildGx !== this.lastHoverGx || buildGy !== this.lastHoverGy) {
+          this.lastHoverGx = buildGx;
+          this.lastHoverGy = buildGy;
+          if (this.canPlaceTower(this.player, buildGx, buildGy)) {
+            const simulatedBlocked = (x, y) => ((x === buildGx || x === buildGx + 1) && (y === buildGy || y === buildGy + 1)) || this.isCellBlocked(this.player, x, y);
+            this.hoverPreviewGuidePath = this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, simulatedBlocked);
+          } else {
+            this.hoverPreviewGuidePath = null;
+          }
+        }
+      } else {
+        this.hoverPreviewGuidePath = null;
+      }
     });
 
     this.canvas.addEventListener('mouseleave', () => {
       this.isHoveringCanvas = false;
+      this.hoverPreviewGuidePath = null;
+      this.lastHoverGx = -1;
+      this.lastHoverGy = -1;
     });
 
     this.canvas.addEventListener('contextmenu', (e) => {
