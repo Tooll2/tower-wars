@@ -426,7 +426,47 @@ class TowerWarsGame {
     }
 
     if (this.myReadyState && (this.enemyReadyState || !this.isMultiplayer)) {
-      this.startBattlePhase();
+      let finalMapId = this.myMapVote;
+      if (this.isMultiplayer) {
+        if (this.myMapVote === this.enemyMapVote) {
+          finalMapId = this.myMapVote;
+        } else {
+          const pool = [this.myMapVote, this.enemyMapVote];
+          finalMapId = pool[Math.floor(Math.random() * 2)];
+        }
+      }
+      this.startBattlePhase(finalMapId);
+    }
+  }
+
+  startNowAction() {
+    this.sound.upgrade();
+    this.myReadyState = true;
+    this.updatePrepUI();
+
+    if (this.isMultiplayer) {
+      this.sendNetAction('READY_VOTE', {
+        ready: true,
+        charId: this.selectedCharacterId,
+        mapId: this.myMapVote,
+        startNow: true
+      });
+    }
+
+    if (this.myReadyState && (this.enemyReadyState || !this.isMultiplayer)) {
+      let finalMapId = this.myMapVote;
+      if (this.isMultiplayer) {
+        if (this.myMapVote === this.enemyMapVote) {
+          finalMapId = this.myMapVote;
+        } else {
+          const pool = [this.myMapVote, this.enemyMapVote];
+          finalMapId = pool[Math.floor(Math.random() * 2)];
+        }
+      }
+      this.startBattlePhase(finalMapId);
+    } else {
+      // Start early locally for self
+      this.startBattlePhase(this.myMapVote);
     }
   }
 
@@ -2878,10 +2918,7 @@ class TowerWarsGame {
     const btnModalStartNow = document.getElementById('btn-modal-start-now');
     if (btnModalStartNow) {
       btnModalStartNow.addEventListener('click', () => {
-        this.startBattlePhase();
-        if (this.isMultiplayer && this.isHost) {
-          this.sendNetAction('BATTLE_START', {});
-        }
+        this.startNowAction();
       });
     }
 
