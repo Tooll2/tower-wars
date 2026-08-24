@@ -2233,29 +2233,41 @@ class TowerWarsGame {
       });
     }
 
-    // Creative Mode ("Мелофон") Button Listeners
+    // Creative Mode ("Мелофон") Button Listeners with Password Prompt
+    const handleCreativePasswordPrompt = () => {
+      this.sound.init();
+      const pwd = window.prompt('Введите секретный пароль для активации Креативного режима:');
+      if (pwd === null) return;
+      const clean = pwd.trim().toLowerCase();
+      if (clean === 'melafon' || clean === 'мелафон' || clean === 'мелофон' || clean === 'melofon') {
+        this.startCreativeMode();
+      } else {
+        this.sound.leak();
+        window.alert('❌ Неверный пароль! Доступ запрещен.');
+      }
+    };
+
     const btnCreative = document.getElementById('btn-creative-mode');
     if (btnCreative) {
-      btnCreative.addEventListener('click', () => {
-        this.sound.init();
-        this.startCreativeMode();
-      });
+      btnCreative.addEventListener('click', handleCreativePasswordPrompt);
     }
 
     const mpBtnCreative = document.getElementById('mp-btn-creative-mode');
     if (mpBtnCreative) {
-      mpBtnCreative.addEventListener('click', () => {
-        this.sound.init();
-        this.startCreativeMode();
-      });
+      mpBtnCreative.addEventListener('click', handleCreativePasswordPrompt);
     }
 
-    // Secret Word Keyboard Listener ("мелофон" / "melofon")
+    // Secret Word Keyboard Listener ("melafon" / "мелафон" / "мелофон" / "melofon")
     window.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'INPUT') return;
       if (e.key && e.key.length === 1) {
         this.secretCodeBuffer = (this.secretCodeBuffer + e.key.toLowerCase()).slice(-10);
-        if (this.secretCodeBuffer.includes('мелофон') || this.secretCodeBuffer.includes('melofon')) {
+        if (
+          this.secretCodeBuffer.includes('melafon') ||
+          this.secretCodeBuffer.includes('мелафон') ||
+          this.secretCodeBuffer.includes('мелофон') ||
+          this.secretCodeBuffer.includes('melofon')
+        ) {
           this.secretCodeBuffer = '';
           this.startCreativeMode();
         }
