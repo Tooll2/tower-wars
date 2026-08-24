@@ -5,8 +5,8 @@
   --bg-card-hover: #233148;
   --border-color: #334155;
   --border-highlight: #3b82f6;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #ffffff;
+  --text-muted: #cbd5e1;
   --gold: #f59e0b;
   --gold-glow: rgba(245, 158, 11, 0.3);
   --income: #10b981;
@@ -378,25 +378,25 @@ button {
 }
 
 #card-title {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #ffffff;
 }
 
 .tag {
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   padding: 2px 8px;
   border-radius: 4px;
   background: #334155;
-  color: #94a3b8;
+  color: #38bdf8;
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .placeholder-text {
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  color: #e2e8f0;
   line-height: 1.5;
   padding: 12px 0;
 }
@@ -405,9 +405,9 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   padding: 2px 0;
-  border-bottom: 1px dashed #24344d;
+  border-bottom: 1px dashed #334155;
   white-space: nowrap;
   min-height: 20px;
   box-sizing: border-box;
@@ -418,11 +418,17 @@ button {
 }
 
 .stat-row span:first-child {
-  color: var(--text-muted);
+  color: #cbd5e1;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+}
+
+.stat-row span:last-child {
+  color: #ffffff;
+  font-weight: 700;
 }
 
 .stat-row span:last-child {
@@ -799,25 +805,25 @@ button {
 }
 
 .race-towers-label {
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #38bdf8;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .race-towers-list-text {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-family: 'JetBrains Mono', monospace;
-  color: #e2e8f0;
+  color: #ffffff;
   white-space: normal;
   line-height: 1.25;
 }
 
 .modal-section-title {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #f8fafc;
   letter-spacing: 0.5px;
   margin: 6px 0 2px 0;
   text-transform: uppercase;
@@ -887,15 +893,16 @@ button {
 }
 
 .architect-block-name {
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #ffffff;
 }
 
 .architect-block-dim {
-  font-size: 0.65rem;
-  color: #94a3b8;
+  font-size: 0.7rem;
+  color: #fdba74;
   font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
 }
 
 .architect-status-banner {
@@ -1627,10 +1634,10 @@ button {
 
 .dev-badge {
   background: #f59e0b;
-  color: #000;
+  color: #0f172a;
   font-weight: 900;
-  font-size: 0.72rem;
-  padding: 2px 6px;
+  font-size: 0.75rem;
+  padding: 2px 8px;
   border-radius: 4px;
   letter-spacing: 0.5px;
 }
@@ -1642,18 +1649,18 @@ button {
 }
 
 .dev-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #f8fafc;
   margin-right: 2px;
 }
 
 .dev-btn {
   background: #1e293b;
   border: 1px solid #475569;
-  color: #f8fafc;
-  font-size: 0.68rem;
-  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -1668,8 +1675,8 @@ button {
 }
 
 .dev-btn.active {
-  background: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.35);
   border-color: #f59e0b;
   color: #fbbf24;
-  font-weight: 800;
+  font-weight: 900;
 }
