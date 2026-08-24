@@ -196,6 +196,13 @@ class TowerWarsGame {
     const towerSelector = document.getElementById('tower-selector-list');
     if (towerSelector) towerSelector.classList.remove('hidden');
 
+    const selectedEntityCard = document.getElementById('selected-entity-card');
+    if (selectedEntityCard) selectedEntityCard.classList.remove('hidden');
+
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
+    const titleElem = document.getElementById('build-panel-title');
+    if (titleElem) titleElem.innerText = `🧪 МЕЛОФОН: ${charDef ? charDef.name : 'БАШНИ'}`;
+
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
       modeBadge.innerText = '🧪 Креатив: Melafon';
@@ -249,21 +256,26 @@ class TowerWarsGame {
     const chars = BALANCE.CHARACTERS || [];
     chars.forEach((c) => {
       const card = document.createElement('div');
-      card.className = `character-card ${this.selectedCharacterId === c.id ? 'selected' : ''}`;
+      const isSelected = (this.selectedCharacterId === c.id);
+      card.className = `character-card ${isSelected ? 'selected' : ''}`;
       card.dataset.id = c.id;
       card.innerHTML = `
         <span class="char-card-icon">${c.icon || '👑'}</span>
         <div class="char-card-info">
-          <span class="char-card-name">${c.name}</span>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+            <span class="char-card-name">${c.name}</span>
+            ${isSelected ? '<span style="color:#10b981; font-weight:800; font-size:0.7rem;">ВЫБРАНО</span>' : ''}
+          </div>
+          <span class="char-card-badge">${c.badge || ''}</span>
           <span class="char-card-desc">${c.desc}</span>
         </div>
       `;
       card.addEventListener('click', () => {
         this.sound.click();
         this.selectedCharacterId = c.id;
-        document.querySelectorAll('.character-card').forEach(el => el.classList.remove('selected'));
-        card.classList.add('selected');
-        this.logEvent(`👤 Выбран персонаж: ${c.name}`, 'log-income');
+        this.renderCharacterSelection();
+        this.renderTowerSelector();
+        this.logEvent(`👑 Выбрана раса: ${c.name}`, 'log-income');
         if (this.myReadyState) {
           this.toggleReady();
         }
@@ -290,12 +302,15 @@ class TowerWarsGame {
     const towerSelector = document.getElementById('tower-selector-list');
     if (towerSelector) towerSelector.classList.add('hidden');
 
+    const selectedEntityCard = document.getElementById('selected-entity-card');
+    if (selectedEntityCard) selectedEntityCard.classList.add('hidden');
+
     const titleElem = document.getElementById('build-panel-title');
-    if (titleElem) titleElem.innerText = '👤 ВЫБОР ПЕРСОНАЖА';
+    if (titleElem) titleElem.innerText = '👑 ВЫБОР РАСЫ';
 
     this.renderCharacterSelection();
     this.updatePrepUI();
-    this.logEvent('⏱ Фаза подготовки (60с)! Выберите персонажа и нажмите «Готов».', 'log-income');
+    this.logEvent('⏱ Фаза подготовки (60с)! Выберите расу и нажмите «Готов».', 'log-income');
   }
 
   toggleReady() {
@@ -357,11 +372,15 @@ class TowerWarsGame {
     const towerSelector = document.getElementById('tower-selector-list');
     if (towerSelector) towerSelector.classList.remove('hidden');
 
+    const selectedEntityCard = document.getElementById('selected-entity-card');
+    if (selectedEntityCard) selectedEntityCard.classList.remove('hidden');
+
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     const titleElem = document.getElementById('build-panel-title');
-    if (titleElem) titleElem.innerText = '🔨 СТРОИТЕЛЬСТВО БАШЕН (2×2)';
+    if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${charDef ? charDef.name : 'СТРОИТЕЛЬСТВО'}`;
 
     this.sound.upgrade();
-    this.logEvent('⚔️ БОЙ НАЧАЛСЯ! Спавните крипов и укрепляйте лабиринт!', 'log-kill');
+    this.logEvent(`⚔️ БОЙ НАЧАЛСЯ! Ваша раса: ${charDef ? charDef.name : ''}. Защищайте базу!`, 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
   }
@@ -1397,9 +1416,21 @@ class TowerWarsGame {
 
   // --- UI and Interaction ---
   initUI() {
+    this.renderCharacterSelection();
     this.renderTowerSelector();
     this.renderCreepButtons();
     this.updateHUD();
+
+    // Default Left Panel View on startup: Race Selection
+    const charView = document.getElementById('character-select-view');
+    const towerSelector = document.getElementById('tower-selector-list');
+    const selectedEntityCard = document.getElementById('selected-entity-card');
+    const titleElem = document.getElementById('build-panel-title');
+
+    if (charView) charView.classList.remove('hidden');
+    if (towerSelector) towerSelector.classList.add('hidden');
+    if (selectedEntityCard) selectedEntityCard.classList.add('hidden');
+    if (titleElem) titleElem.innerText = '👑 ВЫБОР РАСЫ';
   }
 
   renderTowerSelector() {
@@ -1407,7 +1438,12 @@ class TowerWarsGame {
     if (!list) return;
     list.innerHTML = '';
 
-    BALANCE.TOWERS.forEach((tower) => {
+    // Only show Base tower + Racial towers of the selected race!
+    const availableTowers = BALANCE.TOWERS.filter(tower =>
+      tower.id === 'tower_base' || tower.race === this.selectedCharacterId
+    );
+
+    availableTowers.forEach((tower) => {
       const btn = document.createElement('div');
       const isSelected = (this.selectedTowerToBuild === tower);
       btn.className = `tower-btn ${isSelected ? 'selected' : ''}`;

@@ -83,19 +83,20 @@
           <span class="tip" id="build-panel-tip">ПКМ / Esc для отмены</span>
         </div>
 
-        <!-- Character / Deck Selection View (Active during Preparation Phase) -->
-        <div class="character-select-view hidden" id="character-select-view">
+        <!-- Race Selection View (Active during Preparation Phase / Startup) -->
+        <div class="character-select-view" id="character-select-view">
           <div class="char-view-header">
-            <h4>Выберите персонажа</h4>
-            <span class="char-view-sub">Определяет ваш стартовый набор башен</span>
+            <h4>👑 Выберите расу</h4>
+            <span class="char-view-sub">Определяет ваш уникальный набор расовых башен</span>
           </div>
           <div class="character-cards-list" id="character-cards-list"></div>
         </div>
 
-        <!-- Standard Tower Selector (Active in Battle Phase) -->
-        <div class="tower-selector-list" id="tower-selector-list"></div>
+        <!-- Tower Selector (Active in Battle / Creative Phase) -->
+        <div class="tower-selector-list hidden" id="tower-selector-list"></div>
 
-        <div class="selected-entity-card" id="selected-entity-card">
+        <!-- Selected Tower Inspect Card -->
+        <div class="selected-entity-card hidden" id="selected-entity-card">
           <div class="card-header">
             <span id="card-title">Выберите объект</span>
             <span class="tag" id="card-type-tag"></span>
@@ -104,9 +105,11 @@
             <p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>
           </div>
           <div class="card-actions" id="card-actions" style="display: none;">
-            <button id="btn-upgrade-tower" class="btn-action">Обычный апгрейд</button>
-            <button id="btn-upgrade-racial" class="btn-action btn-racial-upgrade" style="display: none;">Расовый апгрейд</button>
-            <button id="btn-sell-tower" class="btn-danger">Продать (75%)</button>
+            <div class="upgrade-buttons-group">
+              <button id="btn-upgrade-tower" class="btn-upgrade-standard">Обычный апгрейд</button>
+              <button id="btn-upgrade-racial" class="btn-upgrade-racial" style="display: none;">Расовый апгрейд</button>
+            </div>
+            <button id="btn-sell-tower" class="btn-sell-action">Продать (75%)</button>
           </div>
         </div>
       </aside>
