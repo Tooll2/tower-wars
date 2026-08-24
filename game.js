@@ -144,6 +144,12 @@ class TowerWarsGame {
     this.enemyReadyState = false;
     this.selectedCharacterId = (BALANCE.CHARACTERS && BALANCE.CHARACTERS[0]) ? BALANCE.CHARACTERS[0].id : 'humans';
 
+    // Map Voting & Layout State
+    this.currentMapId = 'classic';
+    this.activeMap = BALANCE.getMap('classic');
+    this.myMapVote = 'classic';
+    this.enemyMapVote = 'classic';
+
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
 
@@ -305,10 +311,71 @@ class TowerWarsGame {
         if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${c.name}`;
 
         this.logEvent(`👑 Выбрана раса: ${c.name}`, 'log-income');
-        if (this.myReadyState && this.isMultiplayer) {
+        if (this.isMultiplayer) {
           this.sendNetAction('READY_VOTE', {
             ready: this.myReadyState,
-            charId: this.selectedCharacterId
+            charId: this.selectedCharacterId,
+            mapId: this.myMapVote
+          });
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    this.updatePrepUI();
+  }
+
+  setMap(mapId) {
+    this.currentMapId = mapId;
+    this.activeMap = BALANCE.getMap(mapId);
+    this.recalculateCreepPaths(this.player);
+    this.recalculateCreepPaths(this.enemy);
+    this.updateHUD();
+    this.logEvent(`🗺 Выбрана карта: ${this.activeMap.name}`, 'log-income');
+  }
+
+  renderMapVoting() {
+    const grid = document.getElementById('map-cards-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const maps = BALANCE.MAPS || [];
+    maps.forEach((m) => {
+      const card = document.createElement('div');
+      const isSelected = (this.myMapVote === m.id);
+      card.className = `map-card-rich ${isSelected ? 'selected' : ''}`;
+      card.dataset.id = m.id;
+
+      card.innerHTML = `
+        <div class="map-card-top">
+          <span class="map-card-icon">${m.icon || '🗺'}</span>
+          <div class="map-card-title-group">
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <span class="map-card-title">${m.name}</span>
+              ${isSelected ? '<span style="color:#38bdf8; font-weight:800; font-size:0.65rem;">✅ ВАШ ГОЛОС</span>' : ''}
+            </div>
+            <span class="map-card-badge" style="background: ${m.tagColor ? m.tagColor + '22' : 'rgba(56,189,248,0.15)'}; color: ${m.tagColor || '#38bdf8'}; border: 1px solid ${m.tagColor || '#38bdf8'};">
+              ${m.badge || 'Карта'}
+            </span>
+          </div>
+        </div>
+        <div class="map-card-desc">${m.desc}</div>
+      `;
+
+      card.addEventListener('click', () => {
+        this.sound.click();
+        this.myMapVote = m.id;
+        this.renderMapVoting();
+        this.updatePrepUI();
+
+        if (!this.isMultiplayer) {
+          this.setMap(m.id);
+        } else {
+          this.sendNetAction('READY_VOTE', {
+            ready: this.myReadyState,
+            charId: this.selectedCharacterId,
+            mapId: this.myMapVote
           });
         }
       });
@@ -339,9 +406,10 @@ class TowerWarsGame {
     if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${charDef ? charDef.name : ''}`;
 
     this.renderCharacterSelection();
+    this.renderMapVoting();
     this.renderTowerSelector();
     this.updatePrepUI();
-    this.logEvent('⏱ Фаза подготовки (60с)! Выберите расу на экране и подтвердите готовность.', 'log-income');
+    this.logEvent('⏱ Фаза подготовки (60с)! Выберите расу и проголосуйте за карту матча.', 'log-income');
   }
 
   toggleReady() {
@@ -352,15 +420,13 @@ class TowerWarsGame {
     if (this.isMultiplayer) {
       this.sendNetAction('READY_VOTE', {
         ready: this.myReadyState,
-        charId: this.selectedCharacterId
+        charId: this.selectedCharacterId,
+        mapId: this.myMapVote
       });
     }
 
     if (this.myReadyState && (this.enemyReadyState || !this.isMultiplayer)) {
       this.startBattlePhase();
-      if (this.isMultiplayer && this.isHost) {
-        this.sendNetAction('BATTLE_START', {});
-      }
     }
   }
 
@@ -402,15 +468,48 @@ class TowerWarsGame {
 
     const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
     const sumName = document.getElementById('summary-race-name');
-    const sumDesc = document.getElementById('summary-race-desc');
     if (sumName && charDef) sumName.innerText = charDef.name;
-    if (sumDesc && charDef) sumDesc.innerText = charDef.desc;
+
+    const mapDef = (BALANCE.MAPS || []).find(m => m.id === this.myMapVote);
+    const sumMap = document.getElementById('summary-map-name');
+    if (sumMap && mapDef) sumMap.innerText = mapDef.name;
   }
 
-  startBattlePhase() {
+  startBattlePhase(resolvedMapId = null) {
     this.gameState = 'BATTLE';
     this.gameTimeSeconds = 0;
-    this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
+    this.incomeTimer = BALANCE.MAP_CONFIG.INCOME_INTERVAL_SEC;
+
+    // Resolve final map
+    let finalMapId = resolvedMapId;
+    if (!finalMapId) {
+      if (this.isHost || !this.isMultiplayer) {
+        if (this.isMultiplayer) {
+          if (this.myMapVote === this.enemyMapVote) {
+            finalMapId = this.myMapVote;
+          } else {
+            // Pick randomly 50/50 from the two selected/voted maps!
+            const pool = [this.myMapVote, this.enemyMapVote];
+            finalMapId = pool[Math.floor(Math.random() * pool.length)];
+          }
+        } else {
+          finalMapId = this.myMapVote;
+        }
+      } else {
+        finalMapId = this.myMapVote;
+      }
+    }
+
+    if (finalMapId) {
+      this.setMap(finalMapId);
+    }
+
+    if (this.isMultiplayer && this.isHost) {
+      this.sendNetAction('BATTLE_START', {
+        mapId: this.currentMapId,
+        charId: this.selectedCharacterId
+      });
+    }
 
     const modal = document.getElementById('race-selection-modal');
     if (modal) modal.classList.add('hidden');
@@ -426,7 +525,7 @@ class TowerWarsGame {
     if (titleElem) titleElem.innerText = `🔨 БАШНИ: ${charDef ? charDef.name : 'СТРОИТЕЛЬСТВО'}`;
 
     this.sound.upgrade();
-    this.logEvent(`⚔️ БОЙ НАЧАЛСЯ! Ваша раса: ${charDef ? charDef.name : ''}. Защищайте базу!`, 'log-kill');
+    this.logEvent(`⚔️ БОЙ НАЧАЛСЯ! Раса: ${charDef ? charDef.name : ''}. Карта: ${this.activeMap.name}!`, 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
   }
@@ -518,25 +617,30 @@ class TowerWarsGame {
   }
 
   isPermanentWall(x, y) {
-    const wall = BALANCE.MAP.MIDDLE_WALL;
-    return (x >= wall.x && x < wall.x + wall.w && y >= wall.y && y < wall.y + wall.h);
+    const walls = (this.activeMap && this.activeMap.walls) ? this.activeMap.walls : [BALANCE.MAP.MIDDLE_WALL];
+    for (const wall of walls) {
+      if (x >= wall.x && x < wall.x + wall.w && y >= wall.y && y < wall.y + wall.h) {
+        return true;
+      }
+    }
+    return false;
   }
 
   isSpecialNoBuildZone(x, y) {
     if (this.isPermanentWall(x, y)) return true;
 
-    // 4 Corner Control Zones
-    const sz = BALANCE.MAP.SPAWN_ZONE;
-    if (x >= sz.x && x < sz.x + sz.w && y >= sz.y && y < sz.y + sz.h) return true;
+    const zones = (this.activeMap && this.activeMap.zones) ? this.activeMap.zones : [
+      BALANCE.MAP.SPAWN_ZONE,
+      BALANCE.MAP.WAYPOINT_1,
+      BALANCE.MAP.WAYPOINT_2,
+      BALANCE.MAP.EXIT_ZONE
+    ];
 
-    const wp1 = BALANCE.MAP.WAYPOINT_1;
-    if (x >= wp1.x && x < wp1.x + wp1.w && y >= wp1.y && y < wp1.y + wp1.h) return true;
-
-    const wp2 = BALANCE.MAP.WAYPOINT_2;
-    if (x >= wp2.x && x < wp2.x + wp2.w && y >= wp2.y && y < wp2.y + wp2.h) return true;
-
-    const ez = BALANCE.MAP.EXIT_ZONE;
-    if (x >= ez.x && x < ez.x + ez.w && y >= ez.y && y < ez.y + ez.h) return true;
+    for (const z of zones) {
+      if (x >= z.x && x < z.x + z.w && y >= z.y && y < z.y + z.h) {
+        return true;
+      }
+    }
 
     return false;
   }
@@ -564,14 +668,15 @@ class TowerWarsGame {
       return this.isCellBlocked(agent, x, y);
     };
 
-    const fullCircuit = this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, simulatedBlocked);
+    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
+    const fullCircuit = this.pathfinder.findMultiWaypointPath(waypoints, simulatedBlocked);
     if (!fullCircuit) return false;
 
     for (const creep of agent.creeps) {
       const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
       const remainingPoints = [curPos];
-      for (let w = creep.currentWaypointStage; w < BALANCE.MAP.WAYPOINT_COORDS.length; w++) {
-        remainingPoints.push(BALANCE.MAP.WAYPOINT_COORDS[w]);
+      for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
+        remainingPoints.push(waypoints[w]);
       }
       const creepPath = this.pathfinder.findMultiWaypointPath(remainingPoints, simulatedBlocked);
       if (!creepPath) return false;
@@ -624,16 +729,17 @@ class TowerWarsGame {
   }
 
   recalculateCreepPaths(agent) {
+    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
     agent.guidePath = this.pathfinder.findMultiWaypointPath(
-      BALANCE.MAP.WAYPOINT_COORDS,
+      waypoints,
       (x, y) => this.isCellBlocked(agent, x, y)
     );
 
     for (const creep of agent.creeps) {
       const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
       const remainingPoints = [curPos];
-      for (let w = creep.currentWaypointStage; w < BALANCE.MAP.WAYPOINT_COORDS.length; w++) {
-        remainingPoints.push(BALANCE.MAP.WAYPOINT_COORDS[w]);
+      for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
+        remainingPoints.push(waypoints[w]);
       }
       const path = this.pathfinder.findMultiWaypointPath(remainingPoints, (x, y) => this.isCellBlocked(agent, x, y));
       if (path && path.length > 0) {
@@ -644,18 +750,12 @@ class TowerWarsGame {
   }
 
   spawnCreep(senderAgent, receiverAgent, creepDef) {
-    const startCoord = BALANCE.MAP.WAYPOINT_COORDS[0];
+    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
+    const startCoord = waypoints[0];
     const spawnX = startCoord.x;
     const spawnY = startCoord.y;
 
-    const routePoints = [
-      { x: spawnX, y: spawnY },
-      BALANCE.MAP.WAYPOINT_COORDS[1],
-      BALANCE.MAP.WAYPOINT_COORDS[2],
-      BALANCE.MAP.WAYPOINT_COORDS[3]
-    ];
-
-    const path = this.pathfinder.findMultiWaypointPath(routePoints, (x, y) => this.isCellBlocked(receiverAgent, x, y));
+    const path = this.pathfinder.findMultiWaypointPath(waypoints, (x, y) => this.isCellBlocked(receiverAgent, x, y));
     if (!path) return false;
 
     const creep = {
@@ -1040,9 +1140,8 @@ class TowerWarsGame {
   }
 
   updateCreeps(agent, dt) {
-    const wp1 = BALANCE.MAP.WAYPOINT_COORDS[1];
-    const wp2 = BALANCE.MAP.WAYPOINT_COORDS[2];
-    const ez = BALANCE.MAP.WAYPOINT_COORDS[3];
+    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
+    const finalWp = waypoints[waypoints.length - 1];
 
     for (let i = agent.creeps.length - 1; i >= 0; i--) {
       const creep = agent.creeps[i];
@@ -1074,13 +1173,11 @@ class TowerWarsGame {
         continue;
       }
 
-      if (creep.currentWaypointStage === 1) {
-        if (Math.hypot(creep.x - wp1.x, creep.y - wp1.y) < 1.5 || (creep.x >= 68 && creep.y <= 1)) {
-          creep.currentWaypointStage = 2;
-        }
-      } else if (creep.currentWaypointStage === 2) {
-        if (Math.hypot(creep.x - wp2.x, creep.y - wp2.y) < 1.5 || (creep.x <= 1 && creep.y <= 1)) {
-          creep.currentWaypointStage = 3;
+      // Waypoint advancement
+      if (creep.currentWaypointStage < waypoints.length - 1) {
+        const nextWp = waypoints[creep.currentWaypointStage];
+        if (Math.hypot(creep.x - nextWp.x, creep.y - nextWp.y) < 2.0) {
+          creep.currentWaypointStage++;
         }
       }
 
@@ -1102,15 +1199,15 @@ class TowerWarsGame {
         }
       }
 
-      const inExit = (Math.hypot(creep.x - ez.x, creep.y - ez.y) < 1.5 || (creep.x <= 1 && creep.y >= 64));
-      if ((inExit && creep.currentWaypointStage >= 2) || creep.pathIndex >= (creep.path ? creep.path.length : 0)) {
+      const inExit = Math.hypot(creep.x - finalWp.x, creep.y - finalWp.y) < 2.0;
+      if ((inExit && creep.currentWaypointStage >= waypoints.length - 2) || creep.pathIndex >= (creep.path ? creep.path.length : 0)) {
         agent.lives--;
         agent.creeps.splice(i, 1);
 
         if (agent === this.player) {
           this.sound.leak();
           this.logEvent(`🚨 УТЕЧКА! ${creep.name} прошел всю карту (-1 ❤️)!`, 'log-leak');
-          this.addFloatingText(ez.x, ez.y, `-1 ❤️`, '#ef4444', 1.4);
+          this.addFloatingText(finalWp.x, finalWp.y, `-1 ❤️`, '#ef4444', 1.4);
 
           if (this.isMultiplayer) {
             this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
@@ -1238,29 +1335,33 @@ class TowerWarsGame {
       ctx.stroke();
     }
 
-    // 3. Central Obstacle Wall
-    const mw = BALANCE.MAP.MIDDLE_WALL;
-    ctx.fillStyle = '#161f30';
-    ctx.fillRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
+    // 3. Obstacle Walls for Active Map
+    const walls = (this.activeMap && this.activeMap.walls) ? this.activeMap.walls : [BALANCE.MAP.MIDDLE_WALL];
+    for (const mw of walls) {
+      ctx.fillStyle = '#161f30';
+      ctx.fillRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
 
-    // Diagonal texture stripes on the wall
-    ctx.strokeStyle = '#24344d';
-    ctx.lineWidth = 3;
-    for (let d = -mw.h * cs; d < mw.w * cs; d += 18) {
-      ctx.beginPath();
-      ctx.moveTo(mw.x * cs + Math.max(0, d), mw.y * cs + Math.max(0, -d));
-      ctx.lineTo(mw.x * cs + Math.min(mw.w * cs, d + mw.h * cs), mw.y * cs + Math.min(mw.h * cs, -d + mw.w * cs));
-      ctx.stroke();
+      // Diagonal texture stripes on the wall
+      ctx.strokeStyle = '#24344d';
+      ctx.lineWidth = 3;
+      for (let d = -mw.h * cs; d < mw.w * cs; d += 18) {
+        ctx.beginPath();
+        ctx.moveTo(mw.x * cs + Math.max(0, d), mw.y * cs + Math.max(0, -d));
+        ctx.lineTo(mw.x * cs + Math.min(mw.w * cs, d + mw.h * cs), mw.y * cs + Math.min(mw.h * cs, -d + mw.w * cs));
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
     }
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
 
-    // 4. Vibrant 4-Corner Waypoint Portals
-    const sz = BALANCE.MAP.SPAWN_ZONE;
-    const wp1 = BALANCE.MAP.WAYPOINT_1;
-    const wp2 = BALANCE.MAP.WAYPOINT_2;
-    const ez = BALANCE.MAP.EXIT_ZONE;
+    // 4. Vibrant Waypoint Portals for Active Map
+    const zones = (this.activeMap && this.activeMap.zones) ? this.activeMap.zones : [
+      { x: 59, y: 55, w: 11, h: 11, color: '#0ea5e933', borderColor: '#38bdf8', icon: '🚀' },
+      { x: 59, y: 0, w: 11, h: 11, color: '#f59e0b33', borderColor: '#fbbf24', icon: '1️⃣' },
+      { x: 0, y: 0, w: 11, h: 11, color: '#a855f733', borderColor: '#c084fc', icon: '2️⃣' },
+      { x: 0, y: 55, w: 11, h: 11, color: '#ef444433', borderColor: '#f87171', icon: '🏰' }
+    ];
 
     const drawVibrantZone = (zone, colorHex, strokeHex, iconText) => {
       const zx = zone.x * cs;
@@ -1269,42 +1370,42 @@ class TowerWarsGame {
       const zh = zone.h * cs;
 
       // Glow fill
-      ctx.fillStyle = colorHex;
+      ctx.fillStyle = colorHex || 'rgba(56, 189, 248, 0.25)';
       ctx.fillRect(zx, zy, zw, zh);
 
       // Strong border
-      ctx.strokeStyle = strokeHex;
+      ctx.strokeStyle = strokeHex || '#38bdf8';
       ctx.lineWidth = 2.5;
       ctx.strokeRect(zx, zy, zw, zh);
 
       // Concentric Beacon Ring
       ctx.beginPath();
       ctx.arc(zx + zw / 2, zy + zh / 2, Math.min(zw, zh) * 0.42, 0, Math.PI * 2);
-      ctx.strokeStyle = strokeHex;
+      ctx.strokeStyle = strokeHex || '#38bdf8';
       ctx.lineWidth = 2;
       ctx.stroke();
 
       ctx.beginPath();
       ctx.arc(zx + zw / 2, zy + zh / 2, Math.min(zw, zh) * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = strokeHex;
+      ctx.fillStyle = strokeHex || '#38bdf8';
       ctx.fill();
 
       // Icon badge
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(iconText, zx + zw / 2, zy + zh / 2);
+      ctx.fillText(iconText || '📍', zx + zw / 2, zy + zh / 2);
     };
 
-    drawVibrantZone(sz, '#0ea5e933', '#38bdf8', '🚀');   // Spawn (Bottom-Right)
-    drawVibrantZone(wp1, '#f59e0b33', '#fbbf24', '1️⃣'); // Checkpoint 1 (Top-Right)
-    drawVibrantZone(wp2, '#a855f733', '#c084fc', '2️⃣'); // Checkpoint 2 (Top-Left)
-    drawVibrantZone(ez, '#ef444433', '#f87171', '🏰');   // Exit Goal (Bottom-Left)
+    zones.forEach(z => {
+      drawVibrantZone(z, z.color, z.borderColor, z.icon);
+    });
 
     // 5. Dynamic Waypoints Route Guide (Subtle Floor Indicator underneath creeps)
+    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
     const activeGuidePath = (this.activeLane === 'player' && this.hoverPreviewGuidePath)
       ? this.hoverPreviewGuidePath
-      : (agent.guidePath || this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, (x, y) => this.isCellBlocked(agent, x, y)));
+      : (agent.guidePath || this.pathfinder.findMultiWaypointPath(waypoints, (x, y) => this.isCellBlocked(agent, x, y)));
 
     if (activeGuidePath && activeGuidePath.length > 1) {
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
@@ -1507,6 +1608,7 @@ class TowerWarsGame {
   // --- UI and Interaction ---
   initUI() {
     this.renderCharacterSelection();
+    this.renderMapVoting();
     this.renderTowerSelector();
     this.renderCreepButtons();
     this.updateHUD();
@@ -2218,16 +2320,19 @@ class TowerWarsGame {
 
       case 'READY_VOTE': {
         this.enemyReadyState = !!data.payload.ready;
+        if (data.payload.mapId) {
+          this.enemyMapVote = data.payload.mapId;
+        }
         this.updatePrepUI();
         if (this.isHost && this.myReadyState && this.enemyReadyState) {
           this.startBattlePhase();
-          this.sendNetAction('BATTLE_START', {});
         }
         break;
       }
 
       case 'BATTLE_START': {
-        this.startBattlePhase();
+        const resolvedMapId = data.payload ? data.payload.mapId : null;
+        this.startBattlePhase(resolvedMapId);
         break;
       }
     }

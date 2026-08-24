@@ -123,26 +123,38 @@
         <div class="canvas-wrapper">
           <canvas id="game-canvas" width="840" height="792"></canvas>
 
-          <!-- Main Screen Race Selection Modal (Active in Preparation Phase) -->
+          <!-- Main Screen Race & Map Selection Modal (Active in Preparation Phase) -->
           <div id="race-selection-modal" class="race-modal-overlay hidden">
             <div class="race-modal-box">
               <div class="race-modal-header">
                 <div class="race-header-text">
-                  <h2>👑 ВЫБЕРИТЕ РАСУ (ФАЗА ПОДГОТОВКИ)</h2>
-                  <p>Выберите расу для активации уникального набора башен и спецэффектов в бою</p>
+                  <h2>👑 ВЫБОР РАСЫ И КАРТЫ (ФАЗА ПОДГОТОВКИ)</h2>
+                  <p>Выберите расу для разблокировки уникальных башен и проголосуйте за карту матча</p>
                 </div>
                 <div class="race-modal-timer-badge">
                   <span id="race-modal-timer">⏱ 01:00</span>
                 </div>
               </div>
 
+              <!-- Section 1: Race Selection -->
+              <h3 class="modal-section-title">👑 1. ВЫБЕРИТЕ РАСУ</h3>
               <div class="race-cards-grid" id="race-cards-grid">
                 <!-- Dynamically rendered 4 rich race cards -->
               </div>
 
+              <!-- Section 2: Map Voting -->
+              <h3 class="modal-section-title">🗺 2. ГОЛОСОВАНИЕ ЗА КАРТУ МАТЧА</h3>
+              <div class="map-cards-grid" id="map-cards-grid">
+                <!-- Dynamically rendered 4 map cards -->
+              </div>
+
               <div class="race-modal-footer">
                 <div class="race-selected-summary" id="race-selected-summary">
-                  Выбрана раса: <strong id="summary-race-name" style="color:#10b981;">🛡 Люди (Стражи)</strong> — <span id="summary-race-desc">Ближний бой (Радиус: 2.0, Урон x2).</span>
+                  <div>Выбрана раса: <strong id="summary-race-name" style="color:#10b981;">🛡 Люди (Стражи)</strong></div>
+                  <div>Голос за карту: <strong id="summary-map-name" style="color:#38bdf8;">🏰 Классика (U-Подковы)</strong></div>
+                </div>
+                <div class="vote-rule-tip">
+                  🎲 <em>Если голоса совпадут — играется выбранная карта, если разные — случайная 50/50 из двух выбранных игроками карт.</em>
                 </div>
                 <div class="race-modal-actions">
                   <button id="btn-modal-ready" class="btn-modal-ready">✅ Я готов к бою (0/2)</button>

@@ -8,41 +8,151 @@
  */
 
 const BALANCE = {
-  MAP: {
+  // Global Map Settings & Constants
+  MAP_CONFIG: {
     WIDTH: 70,  // Exact 70 cells (35 towers * 2)
     HEIGHT: 66, // Exact 66 cells (33 towers * 2)
+    CELL_SIZE: 12,
     TOWER_CELLS: 2,
     CREEP_CELLS: 1,
-
-    // Lanes layout
-    LEFT_LANE_WIDTH: 26,    // 13 towers
-    MIDDLE_WALL_WIDTH: 18,  // 9 towers
-    RIGHT_LANE_WIDTH: 26,   // 13 towers
-
-    TOP_SECTION_HEIGHT: 24, // 12 towers
-    MIDDLE_WALL_HEIGHT: 42, // 21 towers
-
-    // Central Wall
-    MIDDLE_WALL: { x: 26, y: 24, w: 18, h: 42 },
-
-    // 4 Key Zones (Symmetrical 11x11 Cells)
-    SPAWN_ZONE: { x: 59, y: 55, w: 11, h: 11 },   // Bottom-Right Start (11x11)
-    WAYPOINT_1: { x: 59, y: 0, w: 11, h: 11 },    // Top-Right Checkpoint 1 (11x11)
-    WAYPOINT_2: { x: 0, y: 0, w: 11, h: 11 },     // Top-Left Checkpoint 2 (11x11)
-    EXIT_ZONE: { x: 0, y: 55, w: 11, h: 11 },     // Bottom-Left Goal Base (11x11)
-
-    // Waypoint Coordinates (Exact Corners)
-    WAYPOINT_COORDS: [
-      { x: 69, y: 65 }, // 0: Spawn (Very Bottom-Right Corner)
-      { x: 69, y: 0 },  // 1: Checkpoint 1 (Very Top-Right Corner)
-      { x: 0, y: 0 },   // 2: Checkpoint 2 (Very Top-Left Corner)
-      { x: 0, y: 65 }   // 3: Goal Base (Very Bottom-Left Corner)
-    ],
-
     STARTING_GOLD: 100,
     STARTING_INCOME: 20,
     INCOME_INTERVAL_SEC: 15,
     STARTING_LIVES: 50,
+  },
+
+  // 4 Competitive Map Layouts
+  MAPS: [
+    {
+      id: 'classic',
+      name: '🏰 Классика (U-Подковы)',
+      icon: '🏰',
+      badge: 'П-образный обход',
+      tagColor: '#38bdf8',
+      desc: 'Подъем по правому коридору, переход поверху и спуск на базу слева вокруг центральной скалы.',
+      walls: [
+        { x: 26, y: 24, w: 18, h: 42 }
+      ],
+      zones: [
+        { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 59, y: 55, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 0, y: 55, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
+      ],
+      waypointCoords: [
+        { x: 69, y: 65 }, // 0: Spawn
+        { x: 69, y: 0 },  // 1: WP1
+        { x: 0, y: 0 },   // 2: WP2
+        { x: 0, y: 65 }   // 3: Base
+      ]
+    },
+    {
+      id: 'zigzag',
+      name: '⚡ Зигзаг (S-Лабиринт)',
+      icon: '⚡',
+      badge: '3 вертикали / S-Путь',
+      tagColor: '#a855f7',
+      desc: 'Две противоположные скалы делят карту на 3 глубоких коридора. Максимальная длина пути.',
+      walls: [
+        { x: 20, y: 20, w: 8, h: 46 }, // Снизу вверх
+        { x: 44, y: 0, w: 8, h: 46 }   // Сверху вниз
+      ],
+      zones: [
+        { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 55, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 30, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 59, y: 55, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
+      ],
+      waypointCoords: [
+        { x: 5, y: 60 },
+        { x: 5, y: 5 },
+        { x: 35, y: 60 },
+        { x: 64, y: 5 },
+        { x: 64, y: 60 }
+      ]
+    },
+    {
+      id: 'spiral',
+      name: '🌀 Спираль (Цитадель)',
+      icon: '🌀',
+      badge: 'База в центре',
+      tagColor: '#06b6d4',
+      desc: 'База в самом центре карты! Крипы огибают внешнее кольцо перед заходом в центральную цитадель.',
+      walls: [
+        { x: 16, y: 16, w: 38, h: 6 },
+        { x: 48, y: 22, w: 6, h: 28 },
+        { x: 20, y: 44, w: 34, h: 6 },
+        { x: 16, y: 22, w: 6, h: 16 }
+      ],
+      zones: [
+        { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 0, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 59, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 0, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'base', name: 'ЦИТАДЕЛЬ', type: 'base', icon: '🏰', x: 28, y: 26, w: 14, h: 14, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
+      ],
+      waypointCoords: [
+        { x: 5, y: 5 },
+        { x: 64, y: 5 },
+        { x: 64, y: 60 },
+        { x: 5, y: 60 },
+        { x: 10, y: 40 },
+        { x: 35, y: 33 }
+      ]
+    },
+    {
+      id: 'crossing',
+      name: '⚔️ Перекресток (Kill Zone)',
+      icon: '⚔️',
+      badge: 'Двойной перекресток',
+      tagColor: '#10b981',
+      desc: '2 острова-скалы формируют узкий перекресток в центре, через который крипы проходят дважды.',
+      walls: [
+        { x: 15, y: 15, w: 10, h: 36 },
+        { x: 45, y: 15, w: 10, h: 36 }
+      ],
+      zones: [
+        { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 29, y: 55, w: 12, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
+        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 0, y: 27, w: 11, h: 12, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'wp3', name: 'ПЕРЕКРЕСТОК', type: 'waypoint', icon: '⚔️', x: 29, y: 27, w: 12, h: 12, color: 'rgba(168, 85, 247, 0.25)', borderColor: '#a855f7' },
+        { id: 'wp4', name: 'ТОЧКА 4', type: 'waypoint', icon: '3️⃣', x: 59, y: 27, w: 11, h: 12, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
+        { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 59, y: 0, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
+      ],
+      waypointCoords: [
+        { x: 35, y: 60 },
+        { x: 5, y: 33 },
+        { x: 5, y: 5 },
+        { x: 35, y: 33 },
+        { x: 64, y: 33 },
+        { x: 64, y: 5 }
+      ]
+    }
+  ],
+
+  getMap(mapId) {
+    return this.MAPS.find(m => m.id === mapId) || this.MAPS[0];
+  },
+
+  // Backwards-compatible proxy for legacy MAP references
+  get MAP() {
+    const active = this.MAPS[0];
+    return {
+      WIDTH: this.MAP_CONFIG.WIDTH,
+      HEIGHT: this.MAP_CONFIG.HEIGHT,
+      CELL_SIZE: this.MAP_CONFIG.CELL_SIZE,
+      STARTING_GOLD: this.MAP_CONFIG.STARTING_GOLD,
+      STARTING_INCOME: this.MAP_CONFIG.STARTING_INCOME,
+      INCOME_INTERVAL_SEC: this.MAP_CONFIG.INCOME_INTERVAL_SEC,
+      STARTING_LIVES: this.MAP_CONFIG.STARTING_LIVES,
+      MIDDLE_WALL: active.walls[0],
+      SPAWN_ZONE: active.zones[0],
+      WAYPOINT_1: active.zones[1],
+      WAYPOINT_2: active.zones[2],
+      EXIT_ZONE: active.zones[3],
+      WAYPOINT_COORDS: active.waypointCoords
+    };
   },
 
   ARMOR_TABLE: {
