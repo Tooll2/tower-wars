@@ -688,7 +688,7 @@ class TowerWarsGame {
     });
   }
 
-  // --- Clean Canvas Rendering ---
+  // --- High-Contrast Vibrant Canvas Rendering ---
   render() {
     const ctx = this.ctx;
     const cs = this.cellSize;
@@ -696,15 +696,18 @@ class TowerWarsGame {
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    ctx.fillStyle = '#0b1120';
+    // 1. Dark Blueprint Background
+    ctx.fillStyle = '#0a0f1d';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    ctx.strokeStyle = '#182234';
+    // 2. High-Contrast Grid (1x1 Cells and 2x2 Tower Borders)
+    // 1x1 Cell Lines
+    ctx.strokeStyle = '#1a273f';
     ctx.lineWidth = 1;
     for (let x = 0; x <= this.width; x++) {
       ctx.beginPath();
       ctx.moveTo(x * cs, 0);
-      ctx.lineTo(this.canvas.height);
+      ctx.lineTo(x * cs, this.canvas.height);
       ctx.stroke();
     }
     for (let y = 0; y <= this.height; y++) {
@@ -714,60 +717,97 @@ class TowerWarsGame {
       ctx.stroke();
     }
 
+    // 2x2 Tower Grid Lines (Every 2 cells)
+    ctx.strokeStyle = '#283c5e';
+    ctx.lineWidth = 1.2;
+    for (let x = 0; x <= this.width; x += 2) {
+      ctx.beginPath();
+      ctx.moveTo(x * cs, 0);
+      ctx.lineTo(x * cs, this.canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= this.height; y += 2) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * cs);
+      ctx.lineTo(this.canvas.width, y * cs);
+      ctx.stroke();
+    }
+
+    // 3. Central Obstacle Wall
     const mw = BALANCE.MAP.MIDDLE_WALL;
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = '#161f30';
     ctx.fillRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
 
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 2;
-    for (let d = -mw.h * cs; d < mw.w * cs; d += 16) {
+    // Diagonal texture stripes on the wall
+    ctx.strokeStyle = '#24344d';
+    ctx.lineWidth = 3;
+    for (let d = -mw.h * cs; d < mw.w * cs; d += 18) {
       ctx.beginPath();
       ctx.moveTo(mw.x * cs + Math.max(0, d), mw.y * cs + Math.max(0, -d));
       ctx.lineTo(mw.x * cs + Math.min(mw.w * cs, d + mw.h * cs), mw.y * cs + Math.min(mw.h * cs, -d + mw.w * cs));
       ctx.stroke();
     }
     ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(mw.x * cs, mw.y * cs, mw.w * cs, mw.h * cs);
 
+    // 4. Vibrant 4-Corner Waypoint Portals
     const sz = BALANCE.MAP.SPAWN_ZONE;
     const wp1 = BALANCE.MAP.WAYPOINT_1;
     const wp2 = BALANCE.MAP.WAYPOINT_2;
     const ez = BALANCE.MAP.EXIT_ZONE;
 
-    const drawPortalRing = (zone, color, fillAlpha = 0.2, strokeAlpha = 0.8) => {
-      ctx.fillStyle = `${color}${Math.round(fillAlpha * 255).toString(16).padStart(2, '0')}`;
-      ctx.fillRect(zone.x * cs, zone.y * cs, zone.w * cs, zone.h * cs);
+    const drawVibrantZone = (zone, colorHex, strokeHex, iconText) => {
+      const zx = zone.x * cs;
+      const zy = zone.y * cs;
+      const zw = zone.w * cs;
+      const zh = zone.h * cs;
 
-      ctx.strokeStyle = `${color}${Math.round(strokeAlpha * 255).toString(16).padStart(2, '0')}`;
+      // Glow fill
+      ctx.fillStyle = colorHex;
+      ctx.fillRect(zx, zy, zw, zh);
+
+      // Strong border
+      ctx.strokeStyle = strokeHex;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(zx, zy, zw, zh);
+
+      // Concentric Beacon Ring
+      ctx.beginPath();
+      ctx.arc(zx + zw / 2, zy + zh / 2, Math.min(zw, zh) * 0.42, 0, Math.PI * 2);
+      ctx.strokeStyle = strokeHex;
       ctx.lineWidth = 2;
-      ctx.strokeRect(zone.x * cs, zone.y * cs, zone.w * cs, zone.h * cs);
+      ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc((zone.x + zone.w / 2) * cs, (zone.y + zone.h / 2) * cs, (Math.min(zone.w, zone.h) / 2 - 1) * cs, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(zx + zw / 2, zy + zh / 2, Math.min(zw, zh) * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = strokeHex;
+      ctx.fill();
+
+      // Icon badge
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(iconText, zx + zw / 2, zy + zh / 2);
     };
 
-    drawPortalRing(sz, '#0ea5e9', 0.15, 0.9);
-    drawPortalRing(wp1, '#f59e0b', 0.15, 0.9);
-    drawPortalRing(wp2, '#a855f7', 0.15, 0.9);
-    drawPortalRing(ez, '#ef4444', 0.15, 0.9);
+    drawVibrantZone(sz, '#0ea5e933', '#38bdf8', '🚀');   // Spawn (Bottom-Right)
+    drawVibrantZone(wp1, '#f59e0b33', '#fbbf24', '1️⃣'); // Checkpoint 1 (Top-Right)
+    drawVibrantZone(wp2, '#a855f733', '#c084fc', '2️⃣'); // Checkpoint 2 (Top-Left)
+    drawVibrantZone(ez, '#ef444433', '#f87171', '🏰');   // Exit Goal (Bottom-Left)
 
-    const guideCircuit = this.pathfinder.findMultiWaypointPath(BALANCE.MAP.WAYPOINT_COORDS, (x, y) => this.isCellBlocked(agent, x, y));
-    if (guideCircuit && guideCircuit.length > 0) {
-      ctx.strokeStyle = '#38bdf833';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      for (let i = 0; i < guideCircuit.length; i++) {
-        const px = (guideCircuit[i].x + 0.5) * cs;
-        const py = (guideCircuit[i].y + 0.5) * cs;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
+    // 5. Waypoints Route Guide Dotted Lines
+    const route = BALANCE.MAP.WAYPOINT_COORDS;
+    ctx.strokeStyle = '#38bdf866';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo((route[0].x + 0.5) * cs, (route[0].y + 0.5) * cs);
+    for (let i = 1; i < route.length; i++) {
+      ctx.lineTo((route[i].x + 0.5) * cs, (route[i].y + 0.5) * cs);
     }
+    ctx.stroke();
+    ctx.setLineDash([]);
 
     for (const tower of agent.towers) {
       const tx = tower.x * cs;
@@ -869,30 +909,41 @@ class TowerWarsGame {
       ctx.globalAlpha = 1.0;
     }
 
-    if (this.activeLane === 'player' && this.isHoveringCanvas && this.selectedTowerToBuild) {
+    if (this.activeLane === 'player' && this.isHoveringCanvas) {
       const gx = this.mouseGridPos.x;
       const gy = this.mouseGridPos.y;
 
-      if (gx >= 0 && gx + 1 < this.width && gy >= 0 && gy + 1 < this.height) {
-        const canBuild = this.canPlaceTower(this.player, gx, gy);
-        const bx = gx * cs;
-        const by = gy * cs;
-        const bw = 2 * cs;
-        const bh = 2 * cs;
+      if (gx >= 0 && gx < this.width && gy >= 0 && gy < this.height) {
+        if (this.selectedTowerToBuild) {
+          if (gx + 1 < this.width && gy + 1 < this.height) {
+            const canBuild = this.canPlaceTower(this.player, gx, gy);
+            const bx = gx * cs;
+            const by = gy * cs;
+            const bw = 2 * cs;
+            const bh = 2 * cs;
 
-        ctx.fillStyle = canBuild ? '#10b98133' : '#ef444444';
-        ctx.fillRect(bx, by, bw, bh);
+            ctx.fillStyle = canBuild ? '#10b98144' : '#ef444455';
+            ctx.fillRect(bx, by, bw, bh);
 
-        ctx.strokeStyle = canBuild ? '#10b981' : '#ef4444';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
+            ctx.strokeStyle = canBuild ? '#10b981' : '#ef4444';
+            ctx.lineWidth = 2.5;
+            ctx.strokeRect(bx, by, bw, bh);
 
-        ctx.strokeStyle = canBuild ? '#10b98166' : '#ef444444';
-        ctx.fillStyle = canBuild ? '#10b98111' : '#ef444411';
-        ctx.beginPath();
-        ctx.arc(bx + bw / 2, by + bh / 2, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+            ctx.strokeStyle = canBuild ? '#10b98188' : '#ef444488';
+            ctx.fillStyle = canBuild ? '#10b98118' : '#ef444418';
+            ctx.beginPath();
+            ctx.arc(bx + bw / 2, by + bh / 2, this.selectedTowerToBuild.range * cs, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        } else {
+          // Highlight cell under cursor
+          ctx.fillStyle = '#38bdf822';
+          ctx.fillRect(gx * cs, gy * cs, cs, cs);
+          ctx.strokeStyle = '#38bdf8aa';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(gx * cs, gy * cs, cs, cs);
+        }
       }
     }
   }
