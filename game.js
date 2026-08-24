@@ -38,6 +38,11 @@ class SoundFx {
   }
   leak() { this.playTone(120, 'sawtooth', 0.3, 0.15); }
   build() { this.playTone(350, 'sine', 0.07, 0.08); }
+  click() { this.playTone(600, 'sine', 0.04, 0.05); }
+  upgrade() {
+    this.playTone(520, 'sine', 0.08, 0.08);
+    setTimeout(() => this.playTone(780, 'sine', 0.12, 0.08), 70);
+  }
 }
 
 class TowerWarsGame {

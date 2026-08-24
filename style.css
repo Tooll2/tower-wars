@@ -25,6 +25,10 @@
   user-select: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 body {
   font-family: 'Rubik', sans-serif;
   background-color: var(--bg-dark);
