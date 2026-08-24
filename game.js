@@ -125,6 +125,13 @@ class TowerWarsGame {
     this.isCreativeMode = false;
     this.secretCodeBuffer = '';
 
+    // Tower Drawing & Undo Stack
+    this.isDrawingTowers = false;
+    this.currentDrawStroke = [];
+    this.buildHistoryStack = [];
+    this.lastDrawGx = -1;
+    this.lastDrawGy = -1;
+
     // Lifecycle States: 'IDLE' (frozen at start), 'PREPARATION' (60s prep), 'BATTLE' (active match), 'CREATIVE'
     this.gameState = 'IDLE';
     this.prepTimer = 60;
@@ -413,6 +420,50 @@ class TowerWarsGame {
     this.logEvent(`⚔️ БОЙ НАЧАЛСЯ! Ваша раса: ${charDef ? charDef.name : ''}. Защищайте базу!`, 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
+  }
+
+  undoLastBuild() {
+    if (!this.buildHistoryStack || this.buildHistoryStack.length === 0) {
+      this.logEvent("⚠️ Нет действий для отмены (Ctrl+Z).", 'log-leak');
+      return;
+    }
+
+    const lastAction = this.buildHistoryStack.pop();
+    if (!lastAction || lastAction.length === 0) return;
+
+    let refundTotal = 0;
+    let count = 0;
+
+    for (const tower of lastAction) {
+      let stillExists = false;
+      for (let dy = 0; dy < 2; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          if (this.player.grid[tower.y + dy] && this.player.grid[tower.y + dy][tower.x + dx] === tower) {
+            this.player.grid[tower.y + dy][tower.x + dx] = null;
+            stillExists = true;
+          }
+        }
+      }
+
+      if (stillExists) {
+        const idx = this.player.towers.indexOf(tower);
+        if (idx !== -1) this.player.towers.splice(idx, 1);
+        this.player.gold += tower.def.cost;
+        refundTotal += tower.def.cost;
+        count++;
+
+        if (this.isMultiplayer) {
+          this.sendNetAction('SELL_TOWER', { gx: tower.x, gy: tower.y });
+        }
+      }
+    }
+
+    if (count > 0) {
+      this.sound.coin();
+      this.recalculateCreepPaths(this.player);
+      this.updateHUD();
+      this.logEvent(`↩️ Отменено (Ctrl+Z): удалено ${count} башен (+🪙${refundTotal})`, 'log-income');
+    }
   }
 
   clampCamera() {
@@ -1514,17 +1565,21 @@ class TowerWarsGame {
     const tierBadge = document.getElementById('current-tier-badge');
     if (tierBadge) tierBadge.innerText = `ТИР ${this.player.tier}`;
 
+    const CREEP_HOTKEY_LABELS = ['1', '2', '3', 'Q', 'W', 'E', 'A', 'S', 'D', 'Z', 'X', 'C'];
+
     this.player.creepSlots.forEach((slot, idx) => {
       const btn = document.createElement('button');
       btn.className = 'creep-btn';
       btn.dataset.slot = String(idx);
 
       const incSign = slot.def.income >= 0 ? `+${slot.def.income}` : `${slot.def.income}`;
+      const hk = CREEP_HOTKEY_LABELS[idx] || '';
 
       btn.innerHTML = `
         <div class="creep-radial-cooldown" style="--cd-angle: 0deg;"></div>
         <div class="creep-cd-timer-text" style="display: none;"></div>
         <span class="creep-charge-badge">${slot.charges}/10</span>
+        ${hk ? `<span class="creep-hotkey-badge">${hk}</span>` : ''}
         <span class="creep-btn-icon">${slot.def.icon}</span>
         <span class="creep-btn-name">${slot.def.name}</span>
         <div class="creep-btn-meta">
@@ -2426,8 +2481,10 @@ class TowerWarsGame {
       this.camera.y = 0;
     });
 
-    // Panning with Middle or Right Drag when zoomed in
+    // Panning with Middle or Right Drag when zoomed in, or Drag-to-Draw Towers with Left Click
     this.canvas.addEventListener('mousedown', (e) => {
+      this.sound.init();
+
       if (e.button === 1 || (e.button === 2 && this.camera.zoom > 1.0)) {
         this.camera.isDragging = true;
         this.camera.dragStartX = e.clientX;
@@ -2435,6 +2492,56 @@ class TowerWarsGame {
         this.camera.startCamX = this.camera.x;
         this.camera.startCamY = this.camera.y;
         this.camera.hasDragged = false;
+        return;
+      }
+
+      // Left Click: Tower Drawing or Selection
+      if (e.button === 0 && this.activeLane === 'player') {
+        const { mx, my } = this.getCanvasMousePos(e, true);
+
+        if (this.selectedTowerToBuild) {
+          this.isDrawingTowers = true;
+          this.currentDrawStroke = [];
+
+          const buildGx = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
+          const buildGy = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
+          this.lastDrawGx = buildGx;
+          this.lastDrawGy = buildGy;
+
+          const existingTower = this.player.grid[buildGy] && this.player.grid[buildGy][buildGx];
+          if (!existingTower) {
+            const success = this.placeTower(this.player, buildGx, buildGy, this.selectedTowerToBuild, true, true);
+            if (success) {
+              const placed = this.player.grid[buildGy][buildGx];
+              if (placed) {
+                this.currentDrawStroke.push(placed);
+                this.selectedEntity = placed;
+                this.showTowerInspectCard(this.selectedTowerToBuild, placed);
+              }
+            } else {
+              this.sound.leak();
+              this.logEvent("⚠️ Нельзя строить здесь (стена, контрольные точки или блокировка маршрута)!", 'log-leak');
+            }
+          }
+        } else {
+          // Check existing tower at 1x1 clicked cell
+          const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize)));
+          const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)));
+          const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
+
+          if (existingTower) {
+            this.selectedEntity = existingTower;
+            this.clearBuildSelection();
+            this.showTowerInspectCard(existingTower.def, existingTower);
+          } else {
+            this.selectedEntity = null;
+            this.previewUpgradeTower = null;
+            const details = document.getElementById('card-details');
+            if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
+            const actions = document.getElementById('card-actions');
+            if (actions) actions.style.display = 'none';
+          }
+        }
       }
     });
 
@@ -2454,9 +2561,19 @@ class TowerWarsGame {
       }
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
       if (this.camera.isDragging) {
         this.camera.isDragging = false;
+      }
+
+      if (e.button === 0 && this.isDrawingTowers) {
+        this.isDrawingTowers = false;
+        this.lastDrawGx = -1;
+        this.lastDrawGy = -1;
+        if (this.currentDrawStroke && this.currentDrawStroke.length > 0) {
+          this.buildHistoryStack.push([...this.currentDrawStroke]);
+          this.currentDrawStroke = [];
+        }
       }
     });
 
@@ -2473,6 +2590,30 @@ class TowerWarsGame {
         y: Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)))
       };
       this.isHoveringCanvas = true;
+
+      // Real-time Drawing when dragging mouse with tower selected
+      if (this.isDrawingTowers && this.selectedTowerToBuild && this.activeLane === 'player') {
+        const buildGx = this.mouseGridPos.x;
+        const buildGy = this.mouseGridPos.y;
+
+        if (buildGx !== this.lastDrawGx || buildGy !== this.lastDrawGy) {
+          this.lastDrawGx = buildGx;
+          this.lastDrawGy = buildGy;
+
+          const existing = this.player.grid[buildGy] && this.player.grid[buildGy][buildGx];
+          if (!existing) {
+            const success = this.placeTower(this.player, buildGx, buildGy, this.selectedTowerToBuild, true, true);
+            if (success) {
+              const placed = this.player.grid[buildGy][buildGx];
+              if (placed) {
+                this.currentDrawStroke.push(placed);
+                this.selectedEntity = placed;
+                this.showTowerInspectCard(this.selectedTowerToBuild, placed);
+              }
+            }
+          }
+        }
+      }
 
       // Real-time dynamic route preview when hovering a tower placement
       if (this.activeLane === 'player' && this.selectedTowerToBuild) {
@@ -2516,13 +2657,24 @@ class TowerWarsGame {
         this.selectedEntity = null;
         this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
-        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
         const actions = document.getElementById('card-actions');
         if (actions) actions.style.display = 'none';
       }
     });
 
+    // Keyboard Shortcuts: Ctrl+Z (Undo), Escape, Creep Spawning Hotkeys (1..3, Q..E, A..D, Z..C)
     window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+      // 1. Ctrl + Z (Undo last tower build action / stroke)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'я' || e.key === 'Я')) {
+        e.preventDefault();
+        this.undoLastBuild();
+        return;
+      }
+
+      // 2. Escape: Cancel tower placement / selection / zoom
       if (e.key === 'Escape') {
         if (this.camera.zoom > 1.01) {
           this.camera.zoom = 1.0;
@@ -2533,51 +2685,36 @@ class TowerWarsGame {
         this.selectedEntity = null;
         this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
-        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
         const actions = document.getElementById('card-actions');
         if (actions) actions.style.display = 'none';
-      }
-    });
-
-    this.canvas.addEventListener('click', (e) => {
-      if (this.camera.hasDragged) {
-        this.camera.hasDragged = false;
-        return;
-      }
-      this.sound.init();
-      if (this.activeLane !== 'player') return;
-
-      const { mx, my } = this.getCanvasMousePos(e, true);
-      const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize)));
-      const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)));
-
-      const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
-      if (existingTower) {
-        this.selectedEntity = existingTower;
-        this.clearBuildSelection();
-        this.showTowerInspectCard(existingTower.def, existingTower);
         return;
       }
 
-      if (this.selectedTowerToBuild) {
-        const buildGx = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
-        const buildGy = Math.max(0, Math.min(this.height - 2, Math.round(my / this.cellSize) - 1));
-        const success = this.placeTower(this.player, buildGx, buildGy, this.selectedTowerToBuild, true, true);
-        if (success) {
-          this.selectedEntity = this.player.grid[buildGy][buildGx];
-          this.previewUpgradeTower = null;
-          this.showTowerInspectCard(this.selectedTowerToBuild, this.selectedEntity);
-        } else {
-          this.sound.leak();
-          this.logEvent("⚠️ Нельзя строить здесь (стена, контрольные точки или блокировка маршрута)!", 'log-leak');
+      // 3. Creep Spawning Hotkeys
+      const k = e.key.toLowerCase();
+      const hotkeyMap = {
+        '1': 0,
+        '2': 1,
+        '3': 2,
+        'q': 3, 'й': 3,
+        'w': 4, 'ц': 4, 'v': 4, 'м': 4,
+        'e': 5, 'у': 5,
+        'a': 6, 'ф': 6,
+        's': 7, 'ы': 7,
+        'd': 8, 'в': 8,
+        'z': 9, 'я': 9,
+        'x': 10, 'ч': 10,
+        'c': 11, 'с': 11
+      };
+
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && hotkeyMap[k] !== undefined) {
+        const slotIdx = hotkeyMap[k];
+        if (this.player.creepSlots && this.player.creepSlots[slotIdx]) {
+          e.preventDefault();
+          this.sound.init();
+          this.sendCreepAction(slotIdx);
         }
-      } else {
-        this.selectedEntity = null;
-        this.previewUpgradeTower = null;
-        const details = document.getElementById('card-details');
-        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку слева.</p>';
-        const actions = document.getElementById('card-actions');
-        if (actions) actions.style.display = 'none';
       }
     });
 
