@@ -54,21 +54,18 @@ const BALANCE = {
       tagColor: '#a855f7',
       desc: 'Две противоположные скалы делят карту на 3 глубоких коридора. Максимальная длина пути.',
       walls: [
-        { x: 20, y: 20, w: 8, h: 46 }, // Снизу вверх
-        { x: 44, y: 0, w: 8, h: 46 }   // Сверху вниз
+        { x: 20, y: 16, w: 8, h: 50 }, // Стена 1 (снизу до y:16, открыт проход сверху y:0..15)
+        { x: 44, y: 0, w: 8, h: 50 }   // Стена 2 (сверху до y:49, открыт проход снизу y:50..65)
       ],
       zones: [
         { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 55, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
-        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 0, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
-        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 30, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
-        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'base', name: 'БАЗА', type: 'base', icon: '🏰', x: 59, y: 55, w: 11, h: 11, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
       ],
       waypointCoords: [
         { x: 5, y: 60 },
-        { x: 5, y: 5 },
-        { x: 35, y: 60 },
-        { x: 64, y: 5 },
+        { x: 5, y: 8 },
+        { x: 36, y: 58 },
+        { x: 64, y: 8 },
         { x: 64, y: 60 }
       ]
     },
@@ -87,9 +84,6 @@ const BALANCE = {
       ],
       zones: [
         { id: 'spawn', name: 'СПАВН', type: 'spawn', icon: '🚀', x: 0, y: 0, w: 11, h: 11, color: 'rgba(56, 189, 248, 0.25)', borderColor: '#38bdf8' },
-        { id: 'wp1', name: 'ТОЧКА 1', type: 'waypoint', icon: '1️⃣', x: 59, y: 0, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
-        { id: 'wp2', name: 'ТОЧКА 2', type: 'waypoint', icon: '2️⃣', x: 59, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
-        { id: 'wp3', name: 'ТОЧКА 3', type: 'waypoint', icon: '3️⃣', x: 0, y: 55, w: 11, h: 11, color: 'rgba(234, 179, 8, 0.2)', borderColor: '#eab308' },
         { id: 'base', name: 'ЦИТАДЕЛЬ', type: 'base', icon: '🏰', x: 28, y: 26, w: 14, h: 14, color: 'rgba(239, 68, 68, 0.25)', borderColor: '#ef4444' }
       ],
       waypointCoords: [
