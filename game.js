@@ -136,6 +136,7 @@ class TowerWarsGame {
     this.buildHistoryStack = [];
     this.lastDrawGx = -1;
     this.lastDrawGy = -1;
+    this.pendingTowers = new Map();
 
     // Lifecycle States: 'IDLE' (frozen at start), 'PREPARATION' (60s prep), 'BATTLE' (active match), 'CREATIVE'
     this.gameState = 'IDLE';
@@ -982,14 +983,14 @@ class TowerWarsGame {
     const fullCircuit = this.pathfinder.findMultiWaypointPath(waypoints, simulatedBlocked);
     if (!fullCircuit) return false;
 
+    // Fast check: Verify all creeps have a valid route to their next target waypoint
     for (const creep of agent.creeps) {
+      const curStage = creep.currentWaypointStage || 1;
+      const targetWp = waypoints[curStage];
+      if (!targetWp) continue;
       const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
-      const remainingPoints = [curPos];
-      for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
-        remainingPoints.push(waypoints[w]);
-      }
-      const creepPath = this.pathfinder.findMultiWaypointPath(remainingPoints, simulatedBlocked);
-      if (!creepPath) return false;
+      const path = this.pathfinder.findPath(curPos.x, curPos.y, targetWp.x, targetWp.y, simulatedBlocked);
+      if (!path) return false;
     }
 
     return true;
@@ -1023,9 +1024,8 @@ class TowerWarsGame {
       }
     }
 
-    this.recalculateCreepPaths(agent);
-
     if (agent === this.player) {
+      this.pendingTowers.set(`${gx},${gy}`, { tower, timestamp: Date.now() });
       this.sound.build();
       this.logEvent(`🔨 Построена: ${towerDef.name} (-🪙${towerDef.cost})`, 'log-income');
       this.updateHUD();
@@ -1035,6 +1035,7 @@ class TowerWarsGame {
       }
     }
 
+    this.recalculateCreepPaths(agent);
     return true;
   }
 
@@ -2636,24 +2637,30 @@ class TowerWarsGame {
   _syncTowersFromSnapshot(agent, serverTowers) {
     if (!serverTowers) return;
 
-    let changed = (agent.towers.length !== serverTowers.length);
-    if (!changed) {
-      for (let i = 0; i < serverTowers.length; i++) {
-        if (agent.towers[i].x !== serverTowers[i].x || agent.towers[i].y !== serverTowers[i].y || (agent.towers[i].def && agent.towers[i].def.id !== serverTowers[i].defId)) {
-          changed = true;
-          break;
+    if (agent === this.player) {
+      // 1. Remove confirmed pending towers
+      for (const st of serverTowers) {
+        this.pendingTowers.delete(`${st.x},${st.y}`);
+      }
+
+      // 2. Drop expired pending towers (> 4s)
+      const now = Date.now();
+      for (const [key, pending] of this.pendingTowers.entries()) {
+        if (now - pending.timestamp > 4000) {
+          this.pendingTowers.delete(key);
         }
       }
-    }
 
-    if (changed) {
+      // 3. Clear and rebuild grid
       for (let y = 0; y < this.height; y++) {
         for (let x = 0; x < this.width; x++) {
           agent.grid[y][x] = null;
         }
       }
 
-      agent.towers = serverTowers.map(st => {
+      const mergedTowers = [];
+
+      for (const st of serverTowers) {
         const towerDef = BALANCE.TOWERS.find(t => t.id === st.defId) || BALANCE.TOWERS[0];
         const tower = {
           id: st.id,
@@ -2672,14 +2679,79 @@ class TowerWarsGame {
             }
           }
         }
-        return tower;
-      });
+        mergedTowers.push(tower);
+      }
 
+      // 4. Re-apply unconfirmed pending towers onto the grid seamlessly
+      for (const pending of this.pendingTowers.values()) {
+        const pt = pending.tower;
+        let canReapply = true;
+        for (let dy = 0; dy < 2; dy++) {
+          for (let dx = 0; dx < 2; dx++) {
+            if (pt.y + dy >= this.height || pt.x + dx >= this.width || agent.grid[pt.y + dy][pt.x + dx] !== null) {
+              canReapply = false;
+            }
+          }
+        }
+        if (canReapply) {
+          for (let dy = 0; dy < 2; dy++) {
+            for (let dx = 0; dx < 2; dx++) {
+              agent.grid[pt.y + dy][pt.x + dx] = pt;
+            }
+          }
+          mergedTowers.push(pt);
+        }
+      }
+
+      agent.towers = mergedTowers;
       this.recalculateCreepPaths(agent);
     } else {
-      for (let i = 0; i < serverTowers.length; i++) {
-        agent.towers[i].kills = serverTowers[i].kills;
-        agent.towers[i].totalDamageDealt = serverTowers[i].damageDealt;
+      // Enemy lane towers sync
+      let changed = (agent.towers.length !== serverTowers.length);
+      if (!changed) {
+        for (let i = 0; i < serverTowers.length; i++) {
+          if (agent.towers[i].x !== serverTowers[i].x || agent.towers[i].y !== serverTowers[i].y || (agent.towers[i].def && agent.towers[i].def.id !== serverTowers[i].defId)) {
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      if (changed) {
+        for (let y = 0; y < this.height; y++) {
+          for (let x = 0; x < this.width; x++) {
+            agent.grid[y][x] = null;
+          }
+        }
+
+        agent.towers = serverTowers.map(st => {
+          const towerDef = BALANCE.TOWERS.find(t => t.id === st.defId) || BALANCE.TOWERS[0];
+          const tower = {
+            id: st.id,
+            def: towerDef,
+            x: st.x,
+            y: st.y,
+            level: st.level,
+            kills: st.kills,
+            totalDamageDealt: st.damageDealt
+          };
+
+          for (let dy = 0; dy < 2; dy++) {
+            for (let dx = 0; dx < 2; dx++) {
+              if (st.y + dy < this.height && st.x + dx < this.width) {
+                agent.grid[st.y + dy][st.x + dx] = tower;
+              }
+            }
+          }
+          return tower;
+        });
+
+        this.recalculateCreepPaths(agent);
+      } else {
+        for (let i = 0; i < serverTowers.length; i++) {
+          agent.towers[i].kills = serverTowers[i].kills;
+          agent.towers[i].totalDamageDealt = serverTowers[i].damageDealt;
+        }
       }
     }
   }
@@ -2703,6 +2775,7 @@ class TowerWarsGame {
         creep.maxHp = sc.maxHp;
         creep.armor = sc.armor;
         creep.speed = sc.speed;
+        creep.currentWaypointStage = sc.stage || creep.currentWaypointStage || 1;
         creep.slow = sc.slow;
         creep.poison = sc.poison;
       } else {
@@ -2719,6 +2792,7 @@ class TowerWarsGame {
           y: sc.y,
           targetX: sc.x,
           targetY: sc.y,
+          currentWaypointStage: sc.stage || 1,
           slow: sc.slow,
           poison: sc.poison
         };

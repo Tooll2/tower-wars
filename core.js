@@ -188,14 +188,14 @@
       const fullCircuit = this.pathfinder.findMultiWaypointPath(waypoints, simulatedBlocked);
       if (!fullCircuit) return false;
 
+      // Fast check: Verify all creeps have a valid route to their next target waypoint
       for (const creep of player.creeps) {
+        const curStage = creep.currentWaypointStage || 1;
+        const targetWp = waypoints[curStage];
+        if (!targetWp) continue;
         const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
-        const remainingPoints = [curPos];
-        for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
-          remainingPoints.push(waypoints[w]);
-        }
-        const creepPath = this.pathfinder.findMultiWaypointPath(remainingPoints, simulatedBlocked);
-        if (!creepPath) return false;
+        const path = this.pathfinder.findPath(curPos.x, curPos.y, targetWp.x, targetWp.y, simulatedBlocked);
+        if (!path) return false;
       }
 
       return true;
@@ -893,6 +893,7 @@
         speed: c.speed,
         x: Number(c.x.toFixed(2)),
         y: Number(c.y.toFixed(2)),
+        stage: c.currentWaypointStage || 1,
         slow: c.slowTimer > 0,
         poison: c.poisonTimer > 0
       }));

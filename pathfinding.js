@@ -70,6 +70,7 @@ class PathFinder {
     this.cameFrom = new Int32Array(this.nodeCount);
     this.gScore = new Float32Array(this.nodeCount);
     this.visitedToken = new Uint32Array(this.nodeCount);
+    this.closedToken = new Uint32Array(this.nodeCount);
     this.currentToken = 1;
   }
 
@@ -90,6 +91,7 @@ class PathFinder {
     const cameFrom = this.cameFrom;
     const gScore = this.gScore;
     const visited = this.visitedToken;
+    const closed = this.closedToken;
     const width = this.width;
     const height = this.height;
 
@@ -102,11 +104,16 @@ class PathFinder {
 
     while (heap.size > 0) {
       const curIdx = heap.pop();
+      if (curIdx === -1) break;
+      if (closed[curIdx] === token) continue;
+      closed[curIdx] = token;
+
       if (curIdx === targetIdx) {
-        // Reconstruct path
+        // Reconstruct path with cycle guard
         const path = [];
         let curr = curIdx;
-        while (curr !== -1) {
+        let guard = this.nodeCount;
+        while (curr !== -1 && guard-- > 0) {
           path.push({ x: curr % width, y: (curr / width) | 0 });
           curr = cameFrom[curr];
         }
@@ -118,8 +125,7 @@ class PathFinder {
       const curY = (curIdx / width) | 0;
       const curG = gScore[curIdx];
 
-      // 4 cardinal neighbors
-      // Up, Down, Left, Right
+      // 4 cardinal neighbors (Up, Down, Left, Right)
       for (let dir = 0; dir < 4; dir++) {
         let nx = curX;
         let ny = curY;
@@ -132,6 +138,8 @@ class PathFinder {
         if (isBlockedFn(nx, ny)) continue;
 
         const nIdx = ny * width + nx;
+        if (closed[nIdx] === token) continue;
+
         const nextG = curG + 1;
 
         if (visited[nIdx] !== token || nextG < gScore[nIdx]) {
