@@ -241,7 +241,7 @@ class TowerWarsGame {
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
-      modeBadge.innerText = '🔧 DEV (TOOLL)';
+      modeBadge.innerText = '🔧 DEV РЕЖИМ';
       modeBadge.style.background = '#f59e0b';
       modeBadge.style.color = '#000';
       modeBadge.style.fontWeight = '900';
@@ -252,7 +252,7 @@ class TowerWarsGame {
     mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === (mapId || this.currentMapId)));
 
     this.sound.upgrade();
-    this.logEvent(`🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Уровень: ${this.activeMap.name}. Доступны все 5 карт, расы и ресурсы.`, 'log-kill');
+    this.logEvent(`🔧 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН! Уровень: ${this.activeMap.name}. Доступны все 5 карт, расы и ресурсы.`, 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
   }
@@ -276,14 +276,14 @@ class TowerWarsGame {
       const selectedMap = mapSelect ? mapSelect.value : 'classic';
 
       if (statusMsg) {
-        statusMsg.innerText = '✅ Доступ разработчика разрешен (TOOLL)! Запуск...';
+        statusMsg.innerText = '✅ Доступ разрешен! Запуск...';
         statusMsg.style.color = '#10b981';
       }
       this.startDevMode(selectedMap);
     } else {
       this.sound.leak();
       if (statusMsg) {
-        statusMsg.innerText = '❌ Неверный пароль (Подсказка: TOOLL)!';
+        statusMsg.innerText = '❌ Неверный пароль!';
         statusMsg.style.color = '#ef4444';
       }
       const inp = document.getElementById('melafon-input');
@@ -304,7 +304,7 @@ class TowerWarsGame {
         if (this.isDevMode) {
           if (devToolbar) devToolbar.classList.toggle('hidden');
         } else {
-          const pass = prompt('Введите пароль разработчика (TOOLL):');
+          const pass = prompt('Введите пароль разработчика:');
           if (pass) this.tryUnlockCreative(pass);
         }
       });
