@@ -53,10 +53,19 @@ const server = http.createServer((req, res) => {
 // 2. Real-time Authoritative WebSocket Server
 const wss = new WebSocketServer({ server });
 const rooms = new Map();
+const matchmakingQueue = [];
 
 function sendJson(ws, data) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(data));
+  }
+}
+
+function removeFromQueue(ws) {
+  const idx = matchmakingQueue.findIndex(item => item.ws === ws);
+  if (idx !== -1) {
+    matchmakingQueue.splice(idx, 1);
+    console.log(`[МЭТЧМЕЙКИНГ] Игрок покинул очередь (в очереди: ${matchmakingQueue.length})`);
   }
 }
 
@@ -105,7 +114,94 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        case 'FIND_MATCH': {
+          // Clean disconnected clients from queue
+          while (matchmakingQueue.length > 0 && matchmakingQueue[0].ws.readyState !== WebSocket.OPEN) {
+            matchmakingQueue.shift();
+          }
+
+          if (matchmakingQueue.length > 0) {
+            // Pair with waiting player!
+            const opponent = matchmakingQueue.shift();
+            if (opponent.ws === ws) {
+              matchmakingQueue.push({ ws, playerName: data.playerName || 'Игрок 1', time: Date.now() });
+              return;
+            }
+
+            const roomId = String(Math.floor(1000 + Math.random() * 9000));
+            const p1Name = opponent.playerName || 'Игрок 1';
+            const p2Name = data.playerName || 'Игрок 2';
+
+            const match = new GameMatch({
+              p1Id: 'p1',
+              p1Name: p1Name,
+              p2Id: 'p2',
+              p2Name: p2Name
+            });
+
+            const room = {
+              id: roomId,
+              hostWs: opponent.ws,
+              guestWs: ws,
+              match: match,
+              interval: null,
+              created: Date.now()
+            };
+
+            rooms.set(roomId, room);
+
+            currentRoomId = roomId;
+            playerId = 'p2';
+
+            opponent.ws._currentRoomId = roomId;
+            opponent.ws._playerId = 'p1';
+
+            console.log(`[МЭТЧМЕЙКИНГ] Игра найдена! Комната ${roomId}: ${p1Name} vs ${p2Name}`);
+
+            sendJson(opponent.ws, {
+              type: 'MATCH_START',
+              role: 'host',
+              playerId: 'p1',
+              opponentName: p2Name,
+              roomId: roomId
+            });
+
+            sendJson(ws, {
+              type: 'MATCH_START',
+              role: 'guest',
+              playerId: 'p2',
+              opponentName: p1Name,
+              roomId: roomId
+            });
+
+            startRoomSimulation(room);
+          } else {
+            // Add to waiting queue
+            removeFromQueue(ws);
+            matchmakingQueue.push({
+              ws: ws,
+              playerName: data.playerName || 'Игрок',
+              time: Date.now()
+            });
+
+            sendJson(ws, {
+              type: 'MATCHMAKING_SEARCHING',
+              message: 'Поиск соперника... Ожидание второго игрока'
+            });
+
+            console.log(`[МЭТЧМЕЙКИНГ] Игрок встал в очередь (в очереди: ${matchmakingQueue.length})`);
+          }
+          break;
+        }
+
+        case 'CANCEL_MATCHMAKING': {
+          removeFromQueue(ws);
+          sendJson(ws, { type: 'MATCHMAKING_CANCELLED' });
+          break;
+        }
+
         case 'CREATE_ROOM': {
+          removeFromQueue(ws);
           const roomId = String(Math.floor(1000 + Math.random() * 9000));
           currentRoomId = roomId;
           playerId = 'p1';
@@ -140,6 +236,7 @@ wss.on('connection', (ws) => {
         }
 
         case 'JOIN_ROOM': {
+          removeFromQueue(ws);
           const roomId = String(data.roomId).trim();
           const room = rooms.get(roomId);
 
@@ -186,14 +283,16 @@ wss.on('connection', (ws) => {
         }
 
         case 'COMMAND': {
-          if (!currentRoomId || !playerId) return;
-          const room = rooms.get(currentRoomId);
+          const rId = currentRoomId || ws._currentRoomId;
+          const pId = playerId || ws._playerId;
+          if (!rId || !pId) return;
+          const room = rooms.get(rId);
           if (!room || !room.match) return;
 
           const action = data.action;
           const payload = data.payload || {};
 
-          const result = room.match.handleAction(playerId, action, payload);
+          const result = room.match.handleAction(pId, action, payload);
           if (!result.success) {
             sendJson(ws, {
               type: 'COMMAND_REJECTED',
@@ -210,11 +309,16 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (currentRoomId && rooms.has(currentRoomId)) {
-      const room = rooms.get(currentRoomId);
+    removeFromQueue(ws);
+
+    const rId = currentRoomId || ws._currentRoomId;
+    const pId = playerId || ws._playerId;
+
+    if (rId && rooms.has(rId)) {
+      const room = rooms.get(rId);
       stopRoomSimulation(room);
 
-      const otherWs = (playerId === 'p1') ? room.guestWs : room.hostWs;
+      const otherWs = (pId === 'p1') ? room.guestWs : room.hostWs;
       if (otherWs && otherWs.readyState === WebSocket.OPEN) {
         sendJson(otherWs, {
           type: 'PLAYER_DISCONNECTED',
@@ -222,8 +326,8 @@ wss.on('connection', (ws) => {
         });
       }
 
-      rooms.delete(currentRoomId);
-      console.log(`[КОМНАТА ЗАКРЫТА] Код: ${currentRoomId}`);
+      rooms.delete(rId);
+      console.log(`[КОМНАТА ЗАКРЫТА] Код: ${rId}`);
     }
   });
 });

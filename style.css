@@ -1523,6 +1523,32 @@ button {
   font-size: 0.9rem;
 }
 
+.mp-match-big-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  border: 1px solid #a855f7;
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mp-match-big-btn:hover {
+  background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+  box-shadow: 0 0 26px rgba(124, 58, 237, 0.6);
+  transform: translateY(-1px);
+}
+
+.mp-timer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
 .mp-code-box {
   background: #0b1120;
   border: 1px solid #3b82f6;

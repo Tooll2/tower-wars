@@ -2518,6 +2518,27 @@ class TowerWarsGame {
     if (!data || !data.type) return;
 
     switch (data.type) {
+      case 'MATCHMAKING_SEARCHING': {
+        const searchStatus = document.getElementById('mp-search-status');
+        if (searchStatus) {
+          searchStatus.innerText = data.message || 'Поиск соперника... ⏳';
+          searchStatus.style.color = '#38bdf8';
+        }
+        break;
+      }
+
+      case 'MATCHMAKING_CANCELLED': {
+        if (this.matchmakingTimerInterval) {
+          clearInterval(this.matchmakingTimerInterval);
+          this.matchmakingTimerInterval = null;
+        }
+        const btnFindMatch = document.getElementById('mp-btn-find-match');
+        const searchBox = document.getElementById('mp-search-box');
+        if (btnFindMatch) btnFindMatch.style.display = 'block';
+        if (searchBox) searchBox.classList.add('hidden');
+        break;
+      }
+
       case 'ROOM_CREATED': {
         this.roomId = data.roomId;
         this.myPlayerId = data.playerId || 'p1';
@@ -2533,12 +2554,17 @@ class TowerWarsGame {
       }
 
       case 'MATCH_START': {
+        if (this.matchmakingTimerInterval) {
+          clearInterval(this.matchmakingTimerInterval);
+          this.matchmakingTimerInterval = null;
+        }
         this.roomId = data.roomId;
         this.myPlayerId = data.playerId;
         this.isHost = (data.role === 'host');
         const modal = document.getElementById('mp-modal');
         if (modal) modal.classList.add('hidden');
         this.startMultiplayerSession(this.isHost);
+        this.logEvent(`⚔️ Игра найдена! Соперник: ${data.opponentName || 'Игрок 2'} (Комната #${data.roomId})`, 'log-income');
         break;
       }
 
@@ -2921,17 +2947,29 @@ class TowerWarsGame {
     const modal = document.getElementById('mp-modal');
     const btnClose = document.getElementById('mp-btn-close');
 
+    // 1. Quick Matchmaking Elements
+    const btnFindMatch = document.getElementById('mp-btn-find-match');
+    const searchBox = document.getElementById('mp-search-box');
+    const searchStatus = document.getElementById('mp-search-status');
+    const searchTimer = document.getElementById('mp-search-timer');
+    const btnCancelSearch = document.getElementById('mp-btn-cancel-search');
+
+    // 2. Custom Room Navigation
+    const viewMatchmaking = document.getElementById('mp-view-matchmaking');
+    const viewCustom = document.getElementById('mp-view-custom');
+    const btnToggleCustom = document.getElementById('mp-toggle-custom-rooms');
+    const btnBackToQuick = document.getElementById('mp-back-to-quick');
+
+    // 3. Custom Room Elements
     const tabHost = document.getElementById('mp-tab-host');
     const tabJoin = document.getElementById('mp-tab-join');
-    const viewHost = document.getElementById('mp-view-host');
-    const viewJoin = document.getElementById('mp-view-join');
-
+    const customHostBox = document.getElementById('mp-custom-host-box');
+    const customJoinBox = document.getElementById('mp-custom-join-box');
     const btnCreateRoom = document.getElementById('mp-btn-create-room');
     const hostCodeBox = document.getElementById('mp-host-code-box');
     const hostCodeText = document.getElementById('mp-host-code');
     const btnCopyCode = document.getElementById('mp-btn-copy-code');
     const hostStatus = document.getElementById('mp-host-status');
-
     const joinInput = document.getElementById('mp-join-input');
     const btnConnect = document.getElementById('mp-btn-connect');
     const joinStatus = document.getElementById('mp-join-status');
@@ -2946,22 +2984,103 @@ class TowerWarsGame {
     if (btnClose && modal) {
       btnClose.addEventListener('click', () => {
         modal.classList.add('hidden');
+        if (this.matchmakingTimerInterval) {
+          clearInterval(this.matchmakingTimerInterval);
+          this.matchmakingTimerInterval = null;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.isMatchActive) {
+          this.ws.send(JSON.stringify({ type: 'CANCEL_MATCHMAKING' }));
+        }
       });
     }
 
-    if (tabHost && tabJoin && viewHost && viewJoin) {
+    // --- 1. Quick Matchmaking Trigger ---
+    if (btnFindMatch) {
+      btnFindMatch.addEventListener('click', () => {
+        this.sound.init();
+        btnFindMatch.style.display = 'none';
+        if (searchBox) searchBox.classList.remove('hidden');
+        if (searchStatus) {
+          searchStatus.innerText = 'Подключение к серверу... ⏳';
+          searchStatus.style.color = '#38bdf8';
+        }
+
+        let secondsInQueue = 0;
+        if (searchTimer) searchTimer.innerText = '00:00';
+        if (this.matchmakingTimerInterval) clearInterval(this.matchmakingTimerInterval);
+        this.matchmakingTimerInterval = setInterval(() => {
+          secondsInQueue++;
+          const m = Math.floor(secondsInQueue / 60).toString().padStart(2, '0');
+          const s = Math.floor(secondsInQueue % 60).toString().padStart(2, '0');
+          if (searchTimer) searchTimer.innerText = `${m}:${s}`;
+        }, 1000);
+
+        this.connectWebSocketServer(
+          () => {
+            if (searchStatus) searchStatus.innerText = 'Поиск соперника... ⏳';
+            this.ws.send(JSON.stringify({
+              type: 'FIND_MATCH',
+              playerName: 'Игрок'
+            }));
+          },
+          (err) => {
+            if (searchStatus) {
+              searchStatus.innerText = 'Сервер недоступен. Проверьте соединение.';
+              searchStatus.style.color = '#ef4444';
+            }
+            if (this.matchmakingTimerInterval) {
+              clearInterval(this.matchmakingTimerInterval);
+              this.matchmakingTimerInterval = null;
+            }
+          }
+        );
+      });
+    }
+
+    if (btnCancelSearch) {
+      btnCancelSearch.addEventListener('click', () => {
+        this.sound.init();
+        if (this.matchmakingTimerInterval) {
+          clearInterval(this.matchmakingTimerInterval);
+          this.matchmakingTimerInterval = null;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: 'CANCEL_MATCHMAKING' }));
+        }
+        if (btnFindMatch) btnFindMatch.style.display = 'block';
+        if (searchBox) searchBox.classList.add('hidden');
+      });
+    }
+
+    // --- 2. Toggle Navigation ---
+    if (btnToggleCustom && viewMatchmaking && viewCustom) {
+      btnToggleCustom.addEventListener('click', () => {
+        viewMatchmaking.classList.add('hidden');
+        viewCustom.classList.remove('hidden');
+      });
+    }
+
+    if (btnBackToQuick && viewMatchmaking && viewCustom) {
+      btnBackToQuick.addEventListener('click', () => {
+        viewCustom.classList.add('hidden');
+        viewMatchmaking.classList.remove('hidden');
+      });
+    }
+
+    // --- 3. Custom Room Tabs ---
+    if (tabHost && tabJoin && customHostBox && customJoinBox) {
       tabHost.addEventListener('click', () => {
         tabHost.classList.add('active');
         tabJoin.classList.remove('active');
-        viewHost.classList.remove('hidden');
-        viewJoin.classList.add('hidden');
+        customHostBox.classList.remove('hidden');
+        customJoinBox.classList.add('hidden');
       });
 
       tabJoin.addEventListener('click', () => {
         tabJoin.classList.add('active');
         tabHost.classList.remove('active');
-        viewJoin.classList.remove('hidden');
-        viewHost.classList.add('hidden');
+        customJoinBox.classList.remove('hidden');
+        customHostBox.classList.add('hidden');
       });
     }
 

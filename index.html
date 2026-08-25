@@ -226,37 +226,60 @@
                 <button id="mp-btn-close" class="mp-close-btn">&times;</button>
               </div>
 
-              <div class="mp-tabs">
-                <button id="mp-tab-host" class="mp-tab active">👑 Создать комнату (Хост)</button>
-                <button id="mp-tab-join" class="mp-tab">🎮 Войти по коду (Клиент)</button>
-              </div>
-
-              <!-- Host Tab Content -->
-              <div id="mp-view-host" class="mp-view">
-                <p class="mp-desc">Нажмите кнопку, чтобы получить 4-значный номер комнаты:</p>
-                <button id="mp-btn-create-room" class="btn-action mp-full-btn">Сгенерировать код комнаты</button>
+              <!-- Matchmaking View (Default 1-Click Quick Match) -->
+              <div id="mp-view-matchmaking" class="mp-view">
+                <p class="mp-desc">Автоматический подбор соперника. Нажмите кнопку, чтобы найти пару и начать матч:</p>
+                <button id="mp-btn-find-match" class="btn-action mp-match-big-btn">🔍 НАЙТИ ИГРУ (1v1 ОНЛАЙН)</button>
                 
-                <div id="mp-host-code-box" class="mp-code-box hidden">
-                  <span class="mp-code-label">ВАШ КОД КОМНАТЫ:</span>
-                  <div class="mp-code-row">
-                    <span id="mp-host-code" class="mp-code-text">------</span>
-                    <button id="mp-btn-copy-code" class="btn-secondary">📋 Скопировать</button>
-                  </div>
+                <div id="mp-search-box" class="mp-code-box hidden">
                   <div class="mp-status-spinner">
                     <span class="pulse-dot"></span>
-                    <span id="mp-host-status">Ожидание входа второго игрока...</span>
+                    <span id="mp-search-status">Поиск соперника... ⏳</span>
                   </div>
+                  <div class="mp-timer-row">
+                    <span style="font-size:0.85rem; color:#94a3b8;">В очереди: <strong id="mp-search-timer" style="color:#38bdf8;">00:00</strong></span>
+                    <button id="mp-btn-cancel-search" class="btn-secondary" style="padding:4px 12px; font-size:0.75rem;">Отмена</button>
+                  </div>
+                </div>
+
+                <div style="text-align:center; margin-top:2px;">
+                  <button id="mp-toggle-custom-rooms" class="btn-link" style="background:transparent; border:none; color:#64748b; font-size:0.75rem; text-decoration:underline; cursor:pointer;">⚙ Или создать приватную комнату по коду</button>
                 </div>
               </div>
 
-              <!-- Join Tab Content -->
-              <div id="mp-view-join" class="mp-view hidden">
-                <p class="mp-desc">Введите 4-значный номер комнаты, который вам дал друг:</p>
-                <div class="mp-input-group">
-                  <input type="text" id="mp-join-input" placeholder="Например: 7492" maxlength="8">
-                  <button id="mp-btn-connect" class="btn-action">Присоединиться</button>
+              <!-- Collapsible Custom Rooms View -->
+              <div id="mp-view-custom" class="mp-view hidden">
+                <div class="mp-tabs">
+                  <button id="mp-tab-host" class="mp-tab active">👑 Создать код</button>
+                  <button id="mp-tab-join" class="mp-tab">🎮 Войти по коду</button>
                 </div>
-                <p id="mp-join-status" class="mp-status-msg"></p>
+
+                <div id="mp-custom-host-box">
+                  <button id="mp-btn-create-room" class="btn-action mp-full-btn">Сгенерировать код комнаты</button>
+                  <div id="mp-host-code-box" class="mp-code-box hidden" style="margin-top:10px;">
+                    <span class="mp-code-label">ВАШ КОД КОМНАТЫ:</span>
+                    <div class="mp-code-row">
+                      <span id="mp-host-code" class="mp-code-text">------</span>
+                      <button id="mp-btn-copy-code" class="btn-secondary">📋 Скопировать</button>
+                    </div>
+                    <div class="mp-status-spinner">
+                      <span class="pulse-dot"></span>
+                      <span id="mp-host-status">Ожидание входа второго игрока...</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="mp-custom-join-box" class="hidden">
+                  <div class="mp-input-group">
+                    <input type="text" id="mp-join-input" placeholder="Например: 7492" maxlength="8">
+                    <button id="mp-btn-connect" class="btn-action">Присоединиться</button>
+                  </div>
+                  <p id="mp-join-status" class="mp-status-msg"></p>
+                </div>
+
+                <div style="text-align:center; margin-top:2px;">
+                  <button id="mp-back-to-quick" class="btn-link" style="background:transparent; border:none; color:#38bdf8; font-size:0.75rem; text-decoration:underline; cursor:pointer;">⬅ Назад к быстрому поиску</button>
+                </div>
               </div>
 
               <!-- Creative Mode Direct Entry -->
