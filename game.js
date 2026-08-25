@@ -2591,8 +2591,8 @@ class TowerWarsGame {
     if (window.location.protocol === 'https:') {
       serverUrl = `wss://${window.location.host}`;
     }
-    if (!window.location.host || window.location.protocol === 'file:') {
-      serverUrl = 'ws://localhost:3000';
+    if (!window.location.host || window.location.protocol === 'file:' || window.location.hostname.includes('github.io') || window.location.hostname.includes('surge.sh')) {
+      serverUrl = 'ws://46.173.18.121:3000';
     }
 
     try {
