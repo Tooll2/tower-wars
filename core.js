@@ -206,20 +206,33 @@
       if (!player) return;
 
       const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
-      player.guidePath = this.pathfinder.findMultiWaypointPath(
-        waypoints,
-        (x, y) => this.isCellBlocked(player, x, y)
-      );
+      const isBlocked = (x, y) => this.isCellBlocked(player, x, y);
+
+      player.guidePath = this.pathfinder.findMultiWaypointPath(waypoints, isBlocked);
+      if (!player.guidePath) return;
+
+      const segments = player.guidePath.segments || [];
 
       for (const creep of player.creeps) {
-        const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
-        const remainingPoints = [curPos];
-        for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
-          remainingPoints.push(waypoints[w]);
-        }
-        const path = this.pathfinder.findMultiWaypointPath(remainingPoints, (x, y) => this.isCellBlocked(player, x, y));
-        if (path && path.length > 0) {
-          creep.path = path;
+        const curStage = creep.currentWaypointStage || 1;
+        const curTargetWp = waypoints[curStage];
+        if (!curTargetWp) continue;
+
+        const curX = Math.round(creep.x);
+        const curY = Math.round(creep.y);
+        const toWp = this.pathfinder.findPath(curX, curY, Math.round(curTargetWp.x), Math.round(curTargetWp.y), isBlocked);
+
+        if (toWp && toWp.length > 0) {
+          const stitched = [...toWp];
+          for (let s = curStage; s < segments.length; s++) {
+            const seg = segments[s];
+            if (seg) {
+              for (let k = 1; k < seg.length; k++) {
+                stitched.push(seg[k]);
+              }
+            }
+          }
+          creep.path = stitched;
           creep.pathIndex = 0;
         }
       }

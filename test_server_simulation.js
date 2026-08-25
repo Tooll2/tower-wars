@@ -2,10 +2,11 @@ const { WebSocket } = require('ws');
 const http = require('http');
 
 async function runTest() {
-  console.log('--- Starting Authoritative Server Integration Test ---');
+  const targetUrl = process.env.WS_URL || 'ws://46.173.18.121:3000';
+  console.log(`--- Starting Authoritative Server Integration Test on ${targetUrl} ---`);
   
   // Connect Host
-  const hostWs = new WebSocket('ws://localhost:3000');
+  const hostWs = new WebSocket(targetUrl);
   
   await new Promise((resolve) => hostWs.on('open', resolve));
   console.log('1. Host connected to ws://localhost:3000');
@@ -37,7 +38,7 @@ async function runTest() {
   console.log(`2. Room created with Code: ${roomId}`);
 
   // Connect Guest
-  const guestWs = new WebSocket('ws://localhost:3000');
+  const guestWs = new WebSocket(targetUrl);
   await new Promise((resolve) => guestWs.on('open', resolve));
   console.log('3. Guest connected');
   

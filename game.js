@@ -998,23 +998,13 @@ class TowerWarsGame {
   placeTower(agent, gx, gy, towerDef, deductCost = true, notifyNet = true) {
     if (!this.canPlaceTower(agent, gx, gy)) return false;
 
-    if (this.isMultiplayer) {
-      this.sendServerCommand('BUILD_TOWER', { gx, gy, towerId: towerDef.id });
-      return true;
-    }
-
-    if (this.localCore) {
-      const res = this.localCore.handleAction(this.myPlayerId || 'p1', 'BUILD_TOWER', { gx, gy, towerId: towerDef.id });
-      return res.success;
-    }
-
     if (deductCost && !this.isCreativeMode) {
       if (agent.gold < towerDef.cost) return false;
       agent.gold -= towerDef.cost;
     }
 
     const tower = {
-      id: `tower_${Date.now()}_${Math.random()}`,
+      id: `tower_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
       def: towerDef,
       x: gx,
       y: gy,
@@ -1039,6 +1029,10 @@ class TowerWarsGame {
       this.sound.build();
       this.logEvent(`🔨 Построена: ${towerDef.name} (-🪙${towerDef.cost})`, 'log-income');
       this.updateHUD();
+
+      if (this.isMultiplayer) {
+        this.sendServerCommand('BUILD_TOWER', { gx, gy, towerId: towerDef.id });
+      }
     }
 
     return true;
@@ -1046,20 +1040,33 @@ class TowerWarsGame {
 
   recalculateCreepPaths(agent) {
     const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
-    agent.guidePath = this.pathfinder.findMultiWaypointPath(
-      waypoints,
-      (x, y) => this.isCellBlocked(agent, x, y)
-    );
+    const isBlocked = (x, y) => this.isCellBlocked(agent, x, y);
+
+    agent.guidePath = this.pathfinder.findMultiWaypointPath(waypoints, isBlocked);
+    if (!agent.guidePath) return;
+
+    const segments = agent.guidePath.segments || [];
 
     for (const creep of agent.creeps) {
-      const curPos = { x: Math.round(creep.x), y: Math.round(creep.y) };
-      const remainingPoints = [curPos];
-      for (let w = creep.currentWaypointStage; w < waypoints.length; w++) {
-        remainingPoints.push(waypoints[w]);
-      }
-      const path = this.pathfinder.findMultiWaypointPath(remainingPoints, (x, y) => this.isCellBlocked(agent, x, y));
-      if (path && path.length > 0) {
-        creep.path = path;
+      const curStage = creep.currentWaypointStage || 1;
+      const curTargetWp = waypoints[curStage];
+      if (!curTargetWp) continue;
+
+      const curX = Math.round(creep.x);
+      const curY = Math.round(creep.y);
+      const toWp = this.pathfinder.findPath(curX, curY, Math.round(curTargetWp.x), Math.round(curTargetWp.y), isBlocked);
+
+      if (toWp && toWp.length > 0) {
+        const stitched = [...toWp];
+        for (let s = curStage; s < segments.length; s++) {
+          const seg = segments[s];
+          if (seg) {
+            for (let k = 1; k < seg.length; k++) {
+              stitched.push(seg[k]);
+            }
+          }
+        }
+        creep.path = stitched;
         creep.pathIndex = 0;
       }
     }
@@ -1087,6 +1094,8 @@ class TowerWarsGame {
       slowTimer: 0,
       x: spawnX,
       y: spawnY,
+      targetX: spawnX,
+      targetY: spawnY,
       path: path,
       pathIndex: 0,
       currentWaypointStage: 1
@@ -1106,18 +1115,6 @@ class TowerWarsGame {
       return;
     }
 
-    if (this.isMultiplayer) {
-      this.sendServerCommand('SEND_CREEP', {
-        slotIndex: slotIndex
-      });
-      return;
-    }
-
-    if (this.localCore) {
-      this.localCore.handleAction(this.myPlayerId || 'p1', 'SEND_CREEP', { slotIndex: slotIndex });
-      return;
-    }
-
     this.player.gold -= slot.def.cost;
     slot.charges--;
     this.player.income += slot.def.income;
@@ -1128,7 +1125,14 @@ class TowerWarsGame {
     this.logEvent(`👾 Отправлен ${slot.def.name} (Инком: ${incSign})`, 'log-spawn');
 
     this.updateHUD();
-    this.renderCreepButtons();
+
+    if (this.isMultiplayer) {
+      this.sendServerCommand('SEND_CREEP', {
+        slotIndex: slotIndex
+      });
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'SEND_CREEP', { slotIndex: slotIndex });
+    }
   }
 
   upgradeTierAction() {
@@ -1136,16 +1140,6 @@ class TowerWarsGame {
     const upgradeCost = BALANCE.TIER_UPGRADE_COSTS[this.player.tier - 1];
     if (this.player.gold < upgradeCost) {
       this.logEvent(`⚠️ Недостаточно золота для апгрейда тира (🪙${upgradeCost})!`, 'log-leak');
-      return;
-    }
-
-    if (this.isMultiplayer) {
-      this.sendServerCommand('TIER_UPGRADE', { tier: this.player.tier + 1 });
-      return;
-    }
-
-    if (this.localCore) {
-      this.localCore.handleAction(this.myPlayerId || 'p1', 'TIER_UPGRADE', { tier: this.player.tier + 1 });
       return;
     }
 
@@ -1158,82 +1152,45 @@ class TowerWarsGame {
 
     this.updateHUD();
     this.renderCreepButtons();
+
+    if (this.isMultiplayer) {
+      this.sendServerCommand('TIER_UPGRADE', { tier: this.player.tier });
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'TIER_UPGRADE', { tier: this.player.tier });
+    }
   }
 
   startEngine() {
     this.lastTime = performance.now();
     this.timeAccumulator = 0;
 
-    // Web Worker ticker for unthrottled, continuous background game ticks
-    try {
-      const workerBlob = new Blob([`
-        let timer = null;
-        self.onmessage = function(e) {
-          if (e.data === 'start') {
-            if (!timer) {
-              timer = setInterval(function() {
-                self.postMessage('tick');
-              }, 1000 / 60);
-            }
-          } else if (e.data === 'stop') {
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
-          }
-        };
-      `], { type: 'application/javascript' });
-      const workerUrl = URL.createObjectURL(workerBlob);
-      this.tickerWorker = new Worker(workerUrl);
-      this.tickerWorker.onmessage = () => {
-        this.stepSimulation();
-      };
-      this.tickerWorker.postMessage('start');
-    } catch (e) {
-      console.warn('Web Worker ticker not supported, fallback to interval:', e);
-      setInterval(() => this.stepSimulation(), 1000 / 60);
-    }
+    // Single unified 60fps render and simulation loop
+    const renderLoop = (timestamp) => {
+      if (!this.lastTime) this.lastTime = timestamp;
+      let deltaSec = (timestamp - this.lastTime) / 1000;
+      this.lastTime = timestamp;
 
-    // Main animation loop for 60fps canvas rendering
-    const renderLoop = () => {
-      this.stepSimulation();
+      if (deltaSec > 0.1) deltaSec = 0.1;
+      if (deltaSec > 0) {
+        if (this.localCore) {
+          this.timeAccumulator += deltaSec * this.gameSpeed;
+          const FIXED_DT = 1 / 60;
+          let maxSteps = 5;
+          while (this.timeAccumulator >= FIXED_DT && maxSteps > 0) {
+            this.localCore.step(FIXED_DT);
+            this.handleServerSnapshot(this.localCore.getSnapshot());
+            this.timeAccumulator -= FIXED_DT;
+            maxSteps--;
+          }
+        }
+        this.update(deltaSec);
+      }
+
       this.render();
       requestAnimationFrame(renderLoop);
     };
+
     requestAnimationFrame(renderLoop);
-
-    // Instant catch-up / sync when tab visibility changes or receives focus
-    document.addEventListener('visibilitychange', () => {
-      this.stepSimulation();
-    });
-    window.addEventListener('focus', () => {
-      this.stepSimulation();
-    });
-  }
-
-  stepSimulation() {
-    const now = performance.now();
-    if (!this.lastTime) this.lastTime = now;
-    let deltaSec = (now - this.lastTime) / 1000;
-    this.lastTime = now;
-
-    // Safety ceiling: max 5 seconds catch-up in a single step
-    if (deltaSec > 5.0) deltaSec = 5.0;
-    if (deltaSec <= 0) return;
-
-    if (this.localCore) {
-      this.timeAccumulator += deltaSec * this.gameSpeed;
-      const FIXED_DT = 1 / 60;
-      let maxSteps = 120;
-      while (this.timeAccumulator >= FIXED_DT && maxSteps > 0) {
-        this.localCore.step(FIXED_DT);
-        this.handleServerSnapshot(this.localCore.getSnapshot());
-        this.timeAccumulator -= FIXED_DT;
-        maxSteps--;
-      }
-    }
-
-    this.update(deltaSec);
   }
 
   update(dt) {
@@ -1245,10 +1202,11 @@ class TowerWarsGame {
       return;
     }
 
-    // Client-side smooth 60 FPS interpolation of creep movement
+    // Client-side smooth 60 FPS dead-reckoning movement for BOTH player and enemy creeps
     this.updateCreeps(this.player, dt);
     this.updateCreeps(this.enemy, dt);
 
+    this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateFloatingTexts(dt);
     this.updateCreepUIRealtime();
@@ -1337,100 +1295,18 @@ class TowerWarsGame {
   updateProjectiles(dt) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
-
-      if (p.target && p.target.hp > 0) {
-        p.targetX = p.target.x;
-        p.targetY = p.target.y;
-      }
-
       const dx = p.targetX - p.x;
       const dy = p.targetY - p.y;
       const dist = Math.hypot(dx, dy);
 
-      if (dist < 0.6 || isNaN(dist)) {
-        this.onProjectileHit(p);
+      if (dist < 0.8 || isNaN(dist)) {
         this.projectiles.splice(i, 1);
       } else {
-        const step = p.speed * dt;
+        const step = (p.speed || 34) * dt;
         p.x += (dx / dist) * Math.min(step, dist);
         p.y += (dy / dist) * Math.min(step, dist);
       }
     }
-  }
-
-  onProjectileHit(p) {
-    const agent = p.lane === 'player' ? this.player : this.enemy;
-    const tower = p.tower;
-
-    if (p.target && p.target.hp > 0) {
-      const creep = p.target;
-
-      // 🐟 Murlocs Slow Effect
-      if (tower.def.slowPercent > 0) {
-        creep.slowTimer = 2.5;
-        creep.speed = creep.baseSpeed * (1 - tower.def.slowPercent);
-      }
-
-      // 🏹 Trolls Armor Shred Effect
-      if (tower.def.armorShred > 0) {
-        creep.armor = Math.max(0, creep.armor - tower.def.armorShred);
-      }
-
-      // 🏹 Trolls Poison DoT Effect
-      if (tower.def.poisonDps > 0) {
-        creep.poisonTimer = 3.0;
-        creep.poisonDps = Math.max(creep.poisonDps || 0, tower.def.poisonDps);
-      }
-
-      this.applyDamage(agent, tower, creep, 1.0);
-      this.createHitSparks(p.targetX, p.targetY, tower.def.color);
-    }
-  }
-
-  applyDamage(agent, tower, creep, multiplier = 1.0) {
-    let rawDmg = tower.def.damage * multiplier;
-    let isCrit = false;
-
-    if (tower.def.critChance > 0 && Math.random() < tower.def.critChance) {
-      rawDmg *= tower.def.critMultiplier;
-      isCrit = true;
-    }
-
-    const effectiveArmor = Math.max(0, creep.armor * (1 - (tower.def.armorPierce || 0)));
-    const reduction = BALANCE.getArmorDamageReduction(effectiveArmor);
-    const finalDamage = Math.max(1, Math.round(rawDmg * (1 - reduction)));
-
-    creep.hp -= finalDamage;
-    tower.totalDamageDealt += finalDamage;
-
-    if (agent === this.player && this.activeLane === 'player') {
-      if (isCrit) {
-        this.sound.crit();
-        this.addFloatingText(creep.x, creep.y - 1.0, `💥${finalDamage}!`, '#ec4899', 1.2);
-      } else {
-        this.sound.hit();
-        this.addFloatingText(creep.x, creep.y - 0.6, `${finalDamage}`, '#cbd5e1', 0.8);
-      }
-    }
-
-    if (creep.hp <= 0) {
-      tower.kills++;
-      this.onCreepKilled(agent, creep);
-    }
-  }
-
-  onCreepKilled(agent, creep) {
-    const bounty = creep.def.bounty !== undefined ? creep.def.bounty : (creep.def.income > 0 ? creep.def.income : Math.round(creep.def.cost * 0.075));
-    agent.gold += bounty;
-
-    if (agent === this.player) {
-      this.sound.coin();
-      this.addFloatingText(creep.x, creep.y, `+🪙${bounty}`, '#f59e0b', 1.0);
-      this.logEvent(`💀 Убит ${creep.name} (+🪙${bounty})`, 'log-kill');
-      this.updateHUD();
-    }
-
-    this.createDeathBurst(creep.x, creep.y, '#f59e0b');
   }
 
   updateCreeps(agent, dt) {
@@ -1441,10 +1317,13 @@ class TowerWarsGame {
         const dy = creep.targetY - creep.y;
         const dist = Math.hypot(dx, dy);
 
-        if (dist > 0.001) {
-          const lerpFactor = Math.min(1.0, dt * 18);
-          creep.x += dx * lerpFactor;
-          creep.y += dy * lerpFactor;
+        if (dist > 3.5) {
+          creep.x = creep.targetX;
+          creep.y = creep.targetY;
+        } else if (dist > 0.001) {
+          const factor = Math.min(1.0, dt * 16);
+          creep.x += dx * factor;
+          creep.y += dy * factor;
         } else {
           creep.x = creep.targetX;
           creep.y = creep.targetY;
@@ -2418,16 +2297,6 @@ class TowerWarsGame {
 
     const actualCost = cost || instance.def.upgradeCost || 40;
 
-    if (this.isMultiplayer) {
-      this.sendServerCommand('UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
-      return;
-    }
-
-    if (this.localCore) {
-      this.localCore.handleAction(this.myPlayerId || 'p1', 'UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
-      return;
-    }
-
     if (!this.isCreativeMode) {
       if (this.player.gold < actualCost) {
         this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${actualCost})!`, 'log-leak');
@@ -2442,30 +2311,16 @@ class TowerWarsGame {
     this.logEvent(`⬆️ Башня улучшена до «${nextDef.name}»!`, 'log-income');
     this.showTowerInspectCard(nextDef, instance);
     this.updateHUD();
+
+    if (this.isMultiplayer) {
+      this.sendServerCommand('UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
+    }
   }
 
   sellSelectedTower(instance) {
     if (!instance) return;
-
-    if (this.isMultiplayer) {
-      this.sendServerCommand('SELL_TOWER', { gx: instance.x, gy: instance.y });
-      this.selectedEntity = null;
-      const details = document.getElementById('card-details');
-      if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
-      const actions = document.getElementById('card-actions');
-      if (actions) actions.style.display = 'none';
-      return;
-    }
-
-    if (this.localCore) {
-      this.localCore.handleAction(this.myPlayerId || 'p1', 'SELL_TOWER', { gx: instance.x, gy: instance.y });
-      this.selectedEntity = null;
-      const details = document.getElementById('card-details');
-      if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
-      const actions = document.getElementById('card-actions');
-      if (actions) actions.style.display = 'none';
-      return;
-    }
 
     const refund = Math.round(instance.def.cost * 0.75);
     this.player.gold += refund;
@@ -2489,20 +2344,43 @@ class TowerWarsGame {
     const actions = document.getElementById('card-actions');
     if (actions) actions.style.display = 'none';
     this.updateHUD();
+
+    if (this.isMultiplayer) {
+      this.sendServerCommand('SELL_TOWER', { gx: instance.x, gy: instance.y });
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'SELL_TOWER', { gx: instance.x, gy: instance.y });
+    }
   }
 
   updateHUD() {
-    const goldElem = document.getElementById('player-gold');
-    if (goldElem) goldElem.innerText = this.isCreativeMode ? '∞' : Math.floor(this.player.gold);
+    // Throttled / smart text updates to prevent browser DOM layout thrashing
+    const goldVal = this.isCreativeMode ? '∞' : Math.floor(this.player.gold);
+    if (this._lastGold !== goldVal) {
+      this._lastGold = goldVal;
+      const goldElem = document.getElementById('player-gold');
+      if (goldElem) goldElem.innerText = goldVal;
+    }
 
-    const incElem = document.getElementById('player-income');
-    if (incElem) incElem.innerText = this.isCreativeMode ? '+∞' : `+${this.player.income}`;
+    const incVal = this.isCreativeMode ? '+∞' : `+${this.player.income}`;
+    if (this._lastInc !== incVal) {
+      this._lastInc = incVal;
+      const incElem = document.getElementById('player-income');
+      if (incElem) incElem.innerText = incVal;
+    }
 
-    const livesElem = document.getElementById('player-lives');
-    if (livesElem) livesElem.innerText = this.isCreativeMode ? '∞' : `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    const livesVal = this.isCreativeMode ? '∞' : `${this.player.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    if (this._lastLives !== livesVal) {
+      this._lastLives = livesVal;
+      const livesElem = document.getElementById('player-lives');
+      if (livesElem) livesElem.innerText = livesVal;
+    }
 
-    const enemyLivesElem = document.getElementById('enemy-lives');
-    if (enemyLivesElem) enemyLivesElem.innerText = this.isCreativeMode ? '∞' : `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    const enemyLivesVal = this.isCreativeMode ? '∞' : `${this.enemy.lives} / ${BALANCE.MAP.STARTING_LIVES}`;
+    if (this._lastEnemyLives !== enemyLivesVal) {
+      this._lastEnemyLives = enemyLivesVal;
+      const enemyLivesElem = document.getElementById('enemy-lives');
+      if (enemyLivesElem) enemyLivesElem.innerText = enemyLivesVal;
+    }
 
     // Update Path Length Metric Badge (Bottom-Right Corner)
     const agent = this.activeLane === 'player' ? this.player : this.enemy;
@@ -2533,8 +2411,6 @@ class TowerWarsGame {
         pathDiffElem.className = 'path-diff';
       }
     }
-
-    this.renderCreepButtons();
   }
 
   logEvent(msg, className = '') {
@@ -2739,12 +2615,6 @@ class TowerWarsGame {
     this._syncCreepsFromSnapshot(this.player, snapshot.creeps ? snapshot.creeps[myKey] : []);
     this._syncCreepsFromSnapshot(this.enemy, snapshot.creeps ? snapshot.creeps[enemyKey] : []);
 
-    // Sync Projectiles
-    this.projectiles = (snapshot.projectiles || []).map(p => ({
-      ...p,
-      lane: (p.playerId === this.myPlayerId) ? 'player' : 'enemy'
-    }));
-
     // Process Events
     if (snapshot.events && snapshot.events.length > 0) {
       for (const ev of snapshot.events) {
@@ -2912,9 +2782,19 @@ class TowerWarsGame {
         break;
       }
       case 'TOWER_SHOT': {
-        const isMyLane = (ev.playerId === this.myPlayerId && this.activeLane === 'player') ||
-                         (ev.playerId !== this.myPlayerId && this.activeLane === 'enemy');
-        if (isMyLane) {
+        const isMyLane = (ev.playerId === this.myPlayerId);
+        const lane = isMyLane ? 'player' : 'enemy';
+        this.projectiles.push({
+          id: `proj_${Date.now()}_${Math.random()}`,
+          lane: lane,
+          x: ev.towerX !== undefined ? ev.towerX : (ev.x || 0),
+          y: ev.towerY !== undefined ? ev.towerY : (ev.y || 0),
+          targetX: ev.targetX || 0,
+          targetY: ev.targetY || 0,
+          speed: 34,
+          color: ev.color || '#38bdf8'
+        });
+        if ((isMyLane && this.activeLane === 'player') || (!isMyLane && this.activeLane === 'enemy')) {
           this.sound.shoot();
         }
         break;
