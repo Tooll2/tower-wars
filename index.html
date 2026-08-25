@@ -99,15 +99,6 @@
       </div>
 
       <div class="dev-group">
-        <span class="dev-label">🤖 Мелафон (ИИ):</span>
-        <button class="dev-btn dev-melafon-lvl active" data-dev-melafon="0">🚫 Выкл</button>
-        <button class="dev-btn dev-melafon-lvl" data-dev-melafon="1">🌱 Ур. 1</button>
-        <button class="dev-btn dev-melafon-lvl" data-dev-melafon="2">⚔️ Ур. 2</button>
-        <button class="dev-btn dev-melafon-lvl" data-dev-melafon="3">🔥 Ур. 3</button>
-        <button class="dev-btn dev-melafon-lvl" data-dev-melafon="4">💀 Ур. 4</button>
-      </div>
-
-      <div class="dev-group">
         <span class="dev-label">🛠️ Опции:</span>
         <button id="dev-btn-architect" class="dev-btn">🧱 Режим Стен</button>
         <button id="dev-btn-gold" class="dev-btn">🪙 +10k Золота</button>
@@ -268,23 +259,13 @@
                 <p id="mp-join-status" class="mp-status-msg"></p>
               </div>
 
-              <!-- Singleplayer / Melafon AI Mode Direct Entry -->
+              <!-- Creative Mode Direct Entry -->
               <div class="mp-creative-divider">
-                <span>или Одиночная игра / Бот Мелафон</span>
-              </div>
-              <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
-                <label for="melafon-level-select" style="font-size:0.75rem; font-weight:800; color:#38bdf8; text-align:left;">🤖 Уровень сложности Мелафона (ИИ):</label>
-                <select id="melafon-level-select" style="background:#0f172a; color:#ffffff; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:0.8rem; font-weight:700; cursor:pointer; width:100%;">
-                  <option value="1">🌱 Уровень 1: Новичок (Редкий спам крипов Т1)</option>
-                  <option value="2" selected>⚔️ Уровень 2: Опытный (Крипы Т1-Т2 + башни)</option>
-                  <option value="3">🔥 Уровень 3: Ветеран (Крипы Т2-Т3 + инком раш)</option>
-                  <option value="4">💀 Уровень 4: Гроссмейстер (Крипы Т3-Т4 + босс пуш)</option>
-                  <option value="0">🧪 Песочница / Без ИИ (Свободный тест)</option>
-                </select>
+                <span>или режим песочницы</span>
               </div>
               <div class="mp-input-group">
-                <input type="password" id="melafon-input" placeholder="Пароль (TOOLL / melafon)..." maxlength="30" autocomplete="off">
-                <button id="mp-btn-creative-mode" class="btn-creative-full" style="width: auto; white-space: nowrap; padding: 0 16px;">🤖 Начать игру</button>
+                <input type="password" id="melafon-input" placeholder="Введите пароль..." maxlength="30" autocomplete="off">
+                <button id="mp-btn-creative-mode" class="btn-creative-full" style="width: auto; white-space: nowrap; padding: 0 16px;">🧪 Войти</button>
               </div>
               <p id="melafon-status-msg" class="mp-status-msg"></p>
             </div>
