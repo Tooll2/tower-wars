@@ -1,4 +1,4 @@
-# ⚔️ Shango Tower Wars (1v1 PvP Real-Time Strategy)
+# ⚔️ Tower Wars (1v1 PvP Real-Time Strategy)
 
 > Классическая браузерная PvP Tower Wars игра в реальном времени, вдохновленная кастомными картами Warcraft 3.
 

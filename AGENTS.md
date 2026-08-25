@@ -1,6 +1,6 @@
-# Global Rules & Developer Specification — Shango Tower Wars
+# Global Rules & Developer Specification — Tower Wars
 
-> **Project**: Shango Tower Wars (2D 1v1 PvP Real-Time Strategy)  
+> **Project**: Tower Wars (2D 1v1 PvP Real-Time Strategy)  
 > **Repository**: [https://github.com/Tooll2/tower-wars](https://github.com/Tooll2/tower-wars)  
 > **Production Live URL**: [https://tooll2.github.io/tower-wars/](https://tooll2.github.io/tower-wars/)  
 > **OS Environment**: Windows (PowerShell)  

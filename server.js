@@ -1,5 +1,5 @@
 /**
- * Shango Tower Wars - Dedicated Multiplayer Game Server
+ * Tower Wars - Dedicated Multiplayer Game Server
  * Provides HTTP static file hosting + real-time WebSocket Room Synchronization.
  */
 
@@ -172,7 +172,7 @@ function getNetworkIps() {
 server.listen(PORT, '0.0.0.0', () => {
   const ips = getNetworkIps();
   console.log('======================================================================');
-  console.log(`⚔️  SHANGO TOWER WARS СЕРВЕР ЗАПУЩЕН!`);
+  console.log(`⚔️  TOWER WARS СЕРВЕР ЗАПУЩЕН!`);
   console.log('======================================================================');
   console.log(`👉 ВЫ ОТКРЫВАЕТЕ У СЕБЯ:   http://localhost:${PORT}`);
   console.log('----------------------------------------------------------------------');

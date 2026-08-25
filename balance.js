@@ -1,5 +1,5 @@
 /**
- * Shango Tower Wars - Game Balance Data & Map Layout
+ * Tower Wars - Game Balance Data & Map Layout
  * 4-Point Waypoint System:
  * 1. Bottom-Right (Start / Spawn)
  * 2. Top-Right (Checkpoint 1)

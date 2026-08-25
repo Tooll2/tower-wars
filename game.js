@@ -1,5 +1,5 @@
 /**
- * Shango Tower Wars - Complete 1v1 Real-Time Multiplayer Engine
+ * Tower Wars - Complete 1v1 Real-Time Multiplayer Engine
  * Fully Synchronized via Global MQTT WebSockets
  */
 
