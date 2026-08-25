@@ -188,10 +188,37 @@ class TowerWarsGame {
     this.isHost = true;
     this.isMatchActive = true;
     this.isGameOver = false;
+    this.myPlayerId = 'p1';
     this.gameState = 'CREATIVE';
     this.gameTimeSeconds = 0;
 
-    // Infinite resources for developer sandbox
+    const selectedMap = mapId || this.currentMapId || 'classic';
+
+    if (typeof TowerWarsCore !== 'undefined' && TowerWarsCore.GameMatch) {
+      this.localCore = new TowerWarsCore.GameMatch({
+        mapId: selectedMap,
+        p1Id: 'p1',
+        p1Name: 'Разработчик',
+        p2Id: 'p2',
+        p2Name: 'Бот-песочница'
+      });
+
+      this.localCore.players.p1.gold = 999999999;
+      this.localCore.players.p1.income = 999999;
+      this.localCore.players.p1.lives = 999;
+      this.localCore.players.p1.tier = 3;
+      this.localCore._initCreepSlots(this.localCore.players.p1);
+
+      this.localCore.players.p2.gold = 999999999;
+      this.localCore.players.p2.income = 999999;
+      this.localCore.players.p2.lives = 999;
+      this.localCore.players.p2.tier = 3;
+      this.localCore._initCreepSlots(this.localCore.players.p2);
+
+      this.localCore.startBattlePhase(selectedMap);
+      this.handleServerSnapshot(this.localCore.getSnapshot());
+    }
+
     this.player.gold = 999999999;
     this.player.income = 999999;
     this.player.lives = 999;
@@ -202,13 +229,7 @@ class TowerWarsGame {
     this.enemy.lives = 999;
     this.enemy.tier = 3;
 
-    if (mapId) {
-      this.setMap(mapId);
-    } else {
-      this.recalculateCreepPaths(this.player);
-      this.recalculateCreepPaths(this.enemy);
-    }
-
+    this.setMap(selectedMap);
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
 
@@ -247,9 +268,8 @@ class TowerWarsGame {
       modeBadge.style.fontWeight = '900';
     }
 
-    // Sync active map button in dev toolbar
     const mapBtns = document.querySelectorAll('[data-dev-map]');
-    mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === (mapId || this.currentMapId)));
+    mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === selectedMap));
 
     this.sound.upgrade();
     this.logEvent(`🔧 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН! Уровень: ${this.activeMap.name}. Доступны все 5 карт, расы и ресурсы.`, 'log-kill');
@@ -470,10 +490,8 @@ class TowerWarsGame {
 
         this.logEvent(`👑 Выбрана раса: ${c.name}`, 'log-income');
         if (this.isMultiplayer) {
-          this.sendNetAction('READY_VOTE', {
-            ready: this.myReadyState,
-            charId: this.selectedCharacterId,
-            mapId: this.myMapVote
+          this.sendServerCommand('RACE_SELECT', {
+            raceId: this.selectedCharacterId
           });
         }
       });
@@ -485,24 +503,12 @@ class TowerWarsGame {
   }
 
   setMap(mapId) {
+    const mapDef = BALANCE.getMap(mapId);
+    if (!mapDef) return;
     this.currentMapId = mapId;
-    this.activeMap = BALANCE.getMap(mapId);
-
-    if (this.activeMap && this.activeMap.isCustom) {
-      if (!this.myCustomBlocks || this.myCustomBlocks.length === 0) {
-        this.myCustomBlocks = BALANCE.getRandomCustomBlocks(10);
-      }
-      this.devTowersTabActive = false;
-      if (this.gameState === 'PREPARATION') {
-        this.prepTimer = this.activeMap.prepTimeSec || 180;
-      }
-    }
-
+    this.activeMap = mapDef;
     this.recalculateCreepPaths(this.player);
     this.recalculateCreepPaths(this.enemy);
-    this.renderTowerSelector();
-    this.updateHUD();
-    this.logEvent(`🗺 Выбрана карта: ${this.activeMap.name}`, 'log-income');
   }
 
   renderMapVoting() {
@@ -510,23 +516,25 @@ class TowerWarsGame {
     if (!grid) return;
     grid.innerHTML = '';
 
-    const maps = BALANCE.MAPS || [];
-    maps.forEach((m) => {
-      const card = document.createElement('div');
+    (BALANCE.MAPS || []).forEach(m => {
       const isSelected = (this.myMapVote === m.id);
-      card.className = `map-card-rich ${isSelected ? 'selected' : ''}`;
-      card.dataset.id = m.id;
+      const isOpponentSelected = (this.isMultiplayer && this.enemyMapVote === m.id);
 
+      const card = document.createElement('div');
+      card.className = `map-card ${isSelected ? 'selected' : ''}`;
       card.innerHTML = `
-        <div class="map-card-top">
-          <span class="map-card-icon">${m.icon || '🗺'}</span>
+        <div class="map-card-header">
           <div class="map-card-title-group">
-            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-              <span class="map-card-title">${m.name}</span>
-              ${isSelected ? '<span style="color:#38bdf8; font-weight:800; font-size:0.65rem;">✅ ВАШ ГОЛОС</span>' : ''}
+            <span class="map-card-icon">${m.icon}</span>
+            <div>
+              <div class="map-card-name">${m.name}</div>
+              <span class="map-card-badge" style="background:${m.tagColor}22; color:${m.tagColor}; border:1px solid ${m.tagColor}44;">${m.badge}</span>
             </div>
-            <span class="map-card-badge" style="background: ${m.tagColor ? m.tagColor + '22' : 'rgba(56,189,248,0.15)'}; color: ${m.tagColor || '#38bdf8'}; border: 1px solid ${m.tagColor || '#38bdf8'};">
-              ${m.badge || 'Карта'}
+          </div>
+          <div class="map-votes-badges">
+            ${isOpponentSelected ? '<span class="vote-badge opponent-badge" title="Выбор соперника">👤 Соперник</span>' : ''}
+            <span class="vote-badge ${isSelected ? 'my-badge' : ''}">
+              ${isSelected ? '✅ Ваш голос' : 'Выбрать'}
             </span>
           </div>
         </div>
@@ -542,9 +550,7 @@ class TowerWarsGame {
         if (!this.isMultiplayer) {
           this.setMap(m.id);
         } else {
-          this.sendNetAction('READY_VOTE', {
-            ready: this.myReadyState,
-            charId: this.selectedCharacterId,
+          this.sendServerCommand('MAP_VOTE', {
             mapId: this.myMapVote
           });
         }
@@ -594,25 +600,22 @@ class TowerWarsGame {
     this.updatePrepUI();
 
     if (this.isMultiplayer) {
-      this.sendNetAction('READY_VOTE', {
+      this.sendServerCommand('READY_VOTE', {
         ready: this.myReadyState,
-        charId: this.selectedCharacterId,
+        raceId: this.selectedCharacterId,
         mapId: this.myMapVote
       });
-    }
-
-    if (this.myReadyState && !this.isMultiplayer) {
-      this.startBattlePhase(this.myMapVote);
-    } else if (this.myReadyState && this.enemyReadyState && this.isHost) {
-      let finalMapId = this.myMapVote;
-      if (this.myMapVote === this.enemyMapVote) {
-        finalMapId = this.myMapVote;
-      } else {
-        const pool = [this.myMapVote, this.enemyMapVote];
-        finalMapId = pool[Math.floor(Math.random() * 2)];
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'READY_VOTE', {
+        ready: this.myReadyState,
+        raceId: this.selectedCharacterId,
+        mapId: this.myMapVote
+      });
+      if (this.myReadyState) {
+        this.startBattlePhase(this.myMapVote);
       }
-      this.sendNetAction('BATTLE_START', { mapId: finalMapId });
-      this.startBattlePhase(finalMapId);
+    } else if (this.myReadyState) {
+      this.startBattlePhase(this.myMapVote);
     }
   }
 
@@ -722,38 +725,8 @@ class TowerWarsGame {
     const lastAction = this.buildHistoryStack.pop();
     if (!lastAction || lastAction.length === 0) return;
 
-    let refundTotal = 0;
-    let count = 0;
-
     for (const tower of lastAction) {
-      let stillExists = false;
-      for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
-          if (this.player.grid[tower.y + dy] && this.player.grid[tower.y + dy][tower.x + dx] === tower) {
-            this.player.grid[tower.y + dy][tower.x + dx] = null;
-            stillExists = true;
-          }
-        }
-      }
-
-      if (stillExists) {
-        const idx = this.player.towers.indexOf(tower);
-        if (idx !== -1) this.player.towers.splice(idx, 1);
-        this.player.gold += tower.def.cost;
-        refundTotal += tower.def.cost;
-        count++;
-
-        if (this.isMultiplayer) {
-          this.sendNetAction('SELL_TOWER', { gx: tower.x, gy: tower.y });
-        }
-      }
-    }
-
-    if (count > 0) {
-      this.sound.coin();
-      this.recalculateCreepPaths(this.player);
-      this.updateHUD();
-      this.logEvent(`↩️ Отменено (Ctrl+Z): удалено ${count} башен (+🪙${refundTotal})`, 'log-income');
+      this.sellSelectedTower(tower);
     }
   }
 
@@ -947,10 +920,6 @@ class TowerWarsGame {
     this.renderTowerSelector();
     this.updateHUD();
 
-    if (this.isMultiplayer) {
-      this.sendNetAction('CUSTOM_WALL_SYNC', { walls: this.placedCustomWalls });
-    }
-
     return true;
   }
 
@@ -965,10 +934,6 @@ class TowerWarsGame {
     this.recalculateCreepPaths(this.player);
     this.renderTowerSelector();
     this.updateHUD();
-
-    if (this.isMultiplayer) {
-      this.sendNetAction('CUSTOM_WALL_SYNC', { walls: [] });
-    }
   }
 
   isSpecialNoBuildZone(x, y) {
@@ -1033,6 +998,16 @@ class TowerWarsGame {
   placeTower(agent, gx, gy, towerDef, deductCost = true, notifyNet = true) {
     if (!this.canPlaceTower(agent, gx, gy)) return false;
 
+    if (this.isMultiplayer) {
+      this.sendServerCommand('BUILD_TOWER', { gx, gy, towerId: towerDef.id });
+      return true;
+    }
+
+    if (this.localCore) {
+      const res = this.localCore.handleAction(this.myPlayerId || 'p1', 'BUILD_TOWER', { gx, gy, towerId: towerDef.id });
+      return res.success;
+    }
+
     if (deductCost && !this.isCreativeMode) {
       if (agent.gold < towerDef.cost) return false;
       agent.gold -= towerDef.cost;
@@ -1064,10 +1039,6 @@ class TowerWarsGame {
       this.sound.build();
       this.logEvent(`🔨 Построена: ${towerDef.name} (-🪙${towerDef.cost})`, 'log-income');
       this.updateHUD();
-
-      if (notifyNet && this.isMultiplayer) {
-        this.sendNetAction('BUILD_TOWER', { gx, gy, towerId: towerDef.id });
-      }
     }
 
     return true;
@@ -1135,18 +1106,23 @@ class TowerWarsGame {
       return;
     }
 
+    if (this.isMultiplayer) {
+      this.sendServerCommand('SEND_CREEP', {
+        slotIndex: slotIndex
+      });
+      return;
+    }
+
+    if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'SEND_CREEP', { slotIndex: slotIndex });
+      return;
+    }
+
     this.player.gold -= slot.def.cost;
     slot.charges--;
     this.player.income += slot.def.income;
 
     this.sound.coin();
-
-    if (this.isMultiplayer) {
-      this.sendNetAction('SEND_CREEP', {
-        tier: this.player.tier,
-        slotIndex: slotIndex
-      });
-    }
 
     const incSign = slot.def.income >= 0 ? `+${slot.def.income}` : `${slot.def.income}`;
     this.logEvent(`👾 Отправлен ${slot.def.name} (Инком: ${incSign})`, 'log-spawn');
@@ -1163,16 +1139,22 @@ class TowerWarsGame {
       return;
     }
 
+    if (this.isMultiplayer) {
+      this.sendServerCommand('TIER_UPGRADE', { tier: this.player.tier + 1 });
+      return;
+    }
+
+    if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'TIER_UPGRADE', { tier: this.player.tier + 1 });
+      return;
+    }
+
     this.player.gold -= upgradeCost;
     this.player.tier++;
     this.initCreepSlots(this.player);
 
     this.sound.crit();
     this.logEvent(`🌟 ТИР ПОВЫШЕН ДО ${this.player.tier}! Открыты новые крипы.`, 'log-kill');
-
-    if (this.isMultiplayer) {
-      this.sendNetAction('TIER_UPGRADE', { tier: this.player.tier });
-    }
 
     this.updateHUD();
     this.renderCreepButtons();
@@ -1235,74 +1217,41 @@ class TowerWarsGame {
     let deltaSec = (now - this.lastTime) / 1000;
     this.lastTime = now;
 
-    // Safety ceiling: max 5 seconds catch-up in a single step (prevents freeze on machine sleep)
+    // Safety ceiling: max 5 seconds catch-up in a single step
     if (deltaSec > 5.0) deltaSec = 5.0;
     if (deltaSec <= 0) return;
 
-    this.timeAccumulator += deltaSec * this.gameSpeed;
-
-    const FIXED_DT = 1 / 60; // 60 updates per simulated second
-    let maxSteps = 120; // safety ceiling per tick call
-
-    while (this.timeAccumulator >= FIXED_DT && maxSteps > 0) {
-      this.update(FIXED_DT);
-      this.timeAccumulator -= FIXED_DT;
-      maxSteps--;
+    if (this.localCore) {
+      this.timeAccumulator += deltaSec * this.gameSpeed;
+      const FIXED_DT = 1 / 60;
+      let maxSteps = 120;
+      while (this.timeAccumulator >= FIXED_DT && maxSteps > 0) {
+        this.localCore.step(FIXED_DT);
+        this.handleServerSnapshot(this.localCore.getSnapshot());
+        this.timeAccumulator -= FIXED_DT;
+        maxSteps--;
+      }
     }
+
+    this.update(deltaSec);
   }
 
   update(dt) {
     if (this.isGameOver) return;
-    if (this.gameState === 'IDLE') return; // Completely frozen before match starts!
+    if (this.gameState === 'IDLE') return;
 
     if (this.gameState === 'PREPARATION') {
-      this.prepTimer -= dt;
-      if (this.prepTimer <= 0) {
-        this.prepTimer = 0;
-        this.startBattlePhase();
-        if (this.isMultiplayer && this.isHost) {
-          this.sendNetAction('BATTLE_START', {});
-        }
-      }
       this.updatePrepUI();
-      return; // In preparation phase, no income ticks, no creep movement
+      return;
     }
 
-    this.gameTimeSeconds += dt;
-
-    this.incomeTimer -= dt;
-    if (this.incomeTimer <= 0) {
-      this.incomeTimer += BALANCE.MAP.INCOME_INTERVAL_SEC;
-      this.player.gold += this.player.income;
-      this.enemy.gold += this.enemy.income;
-      this.sound.coin();
-      this.logEvent(`💰 Получен инком: +🪙${this.player.income}`, 'log-income');
-      this.addFloatingText(this.width / 2, 4, `+🪙${this.player.income}`, '#10b981');
-      this.updateHUD();
-    }
-
-    this.updateCreepSlots(this.player, dt);
-    this.updateCreepSlots(this.enemy, dt);
-
-    this.updateTowers(this.player, dt);
-    this.updateTowers(this.enemy, dt);
-
+    // Client-side smooth 60 FPS interpolation of creep movement
     this.updateCreeps(this.player, dt);
     this.updateCreeps(this.enemy, dt);
 
-    this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateFloatingTexts(dt);
-
     this.updateCreepUIRealtime();
-
-    if (this.player.lives <= 0) {
-      this.isGameOver = true;
-      this.triggerGameOver(false);
-    } else if (this.enemy.lives <= 0) {
-      this.isGameOver = true;
-      this.triggerGameOver(true);
-    }
 
     const timerElem = document.getElementById('income-timer');
     if (timerElem) timerElem.innerText = `${Math.ceil(this.incomeTimer)}s`;
@@ -1485,83 +1434,21 @@ class TowerWarsGame {
   }
 
   updateCreeps(agent, dt) {
-    const waypoints = (this.activeMap && this.activeMap.waypointCoords) ? this.activeMap.waypointCoords : BALANCE.MAP.WAYPOINT_COORDS;
-    const finalWp = waypoints[waypoints.length - 1];
-
-    for (let i = agent.creeps.length - 1; i >= 0; i--) {
+    for (let i = 0; i < agent.creeps.length; i++) {
       const creep = agent.creeps[i];
-
-      // Slow Timer
-      if (creep.slowTimer > 0) {
-        creep.slowTimer -= dt;
-        if (creep.slowTimer <= 0) {
-          creep.speed = creep.baseSpeed;
-        }
-      }
-
-      // Poison DoT
-      if (creep.poisonTimer > 0) {
-        creep.poisonTimer -= dt;
-        const poisonDmg = (creep.poisonDps || 0) * dt;
-        creep.hp -= poisonDmg;
-        if (creep.hp <= 0) {
-          if (agent === this.player) {
-            this.onCreepKilled(agent, creep);
-          }
-          agent.creeps.splice(i, 1);
-          continue;
-        }
-      }
-
-      if (creep.hp <= 0) {
-        agent.creeps.splice(i, 1);
-        continue;
-      }
-
-      // Waypoint advancement
-      if (creep.currentWaypointStage < waypoints.length - 1) {
-        const nextWp = waypoints[creep.currentWaypointStage];
-        if (Math.hypot(creep.x - nextWp.x, creep.y - nextWp.y) < 2.0) {
-          creep.currentWaypointStage++;
-        }
-      }
-
-      if (creep.path && creep.pathIndex < creep.path.length) {
-        const targetNode = creep.path[creep.pathIndex];
-        const dx = targetNode.x - creep.x;
-        const dy = targetNode.y - creep.y;
+      if (creep.targetX !== undefined && creep.targetY !== undefined) {
+        const dx = creep.targetX - creep.x;
+        const dy = creep.targetY - creep.y;
         const dist = Math.hypot(dx, dy);
 
-        const moveStep = creep.speed * dt * 2.2;
-
-        if (dist <= moveStep) {
-          creep.x = targetNode.x;
-          creep.y = targetNode.y;
-          creep.pathIndex++;
+        if (dist > 0.001) {
+          const lerpFactor = Math.min(1.0, dt * 18);
+          creep.x += dx * lerpFactor;
+          creep.y += dy * lerpFactor;
         } else {
-          creep.x += (dx / dist) * moveStep;
-          creep.y += (dy / dist) * moveStep;
+          creep.x = creep.targetX;
+          creep.y = creep.targetY;
         }
-      }
-
-      const inExit = Math.hypot(creep.x - finalWp.x, creep.y - finalWp.y) < 2.0;
-      if ((inExit && creep.currentWaypointStage >= waypoints.length - 2) || creep.pathIndex >= (creep.path ? creep.path.length : 0)) {
-        agent.lives--;
-        agent.creeps.splice(i, 1);
-
-        if (agent === this.player) {
-          this.sound.leak();
-          this.logEvent(`🚨 УТЕЧКА! ${creep.name} прошел всю карту (-1 ❤️)!`, 'log-leak');
-          this.addFloatingText(finalWp.x, finalWp.y, `-1 ❤️`, '#ef4444', 1.4);
-
-          if (this.isMultiplayer) {
-            this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
-          }
-        } else {
-          this.logEvent(`🎯 Твой ${creep.name} прошел базу соперника!`, 'log-income');
-        }
-
-        this.updateHUD();
       }
     }
   }
@@ -2531,6 +2418,16 @@ class TowerWarsGame {
 
     const actualCost = cost || instance.def.upgradeCost || 40;
 
+    if (this.isMultiplayer) {
+      this.sendServerCommand('UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
+      return;
+    }
+
+    if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: actualCost });
+      return;
+    }
+
     if (!this.isCreativeMode) {
       if (this.player.gold < actualCost) {
         this.logEvent(`⚠️ Недостаточно золота для улучшения (🪙${actualCost})!`, 'log-leak');
@@ -2545,14 +2442,31 @@ class TowerWarsGame {
     this.logEvent(`⬆️ Башня улучшена до «${nextDef.name}»!`, 'log-income');
     this.showTowerInspectCard(nextDef, instance);
     this.updateHUD();
-
-    if (this.isMultiplayer) {
-      this.sendNetAction('UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id });
-    }
   }
 
   sellSelectedTower(instance) {
     if (!instance) return;
+
+    if (this.isMultiplayer) {
+      this.sendServerCommand('SELL_TOWER', { gx: instance.x, gy: instance.y });
+      this.selectedEntity = null;
+      const details = document.getElementById('card-details');
+      if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
+      const actions = document.getElementById('card-actions');
+      if (actions) actions.style.display = 'none';
+      return;
+    }
+
+    if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', 'SELL_TOWER', { gx: instance.x, gy: instance.y });
+      this.selectedEntity = null;
+      const details = document.getElementById('card-details');
+      if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
+      const actions = document.getElementById('card-actions');
+      if (actions) actions.style.display = 'none';
+      return;
+    }
+
     const refund = Math.round(instance.def.cost * 0.75);
     this.player.gold += refund;
 
@@ -2569,10 +2483,6 @@ class TowerWarsGame {
     this.selectedEntity = null;
     this.sound.coin();
     this.logEvent(`💰 Башня продана (+🪙${refund})`, 'log-income');
-
-    if (this.isMultiplayer) {
-      this.sendNetAction('SELL_TOWER', { gx: instance.x, gy: instance.y });
-    }
 
     const details = document.getElementById('card-details');
     if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
@@ -2665,220 +2575,388 @@ class TowerWarsGame {
     }
   }
 
-  // --- 100% UNBLOCKED MQTT WEBSOCKET MULTIPLAYER ---
-  connectMqttBroker(roomId, onReadyCallback, onErrorCallback) {
-    const brokerUrls = [
-      'wss://broker.emqx.io:8084/mqtt',
-      'wss://broker.hivemq.com:8884/mqtt'
-    ];
+  // --- AUTHORITATIVE WEBSOCKET MULTIPLAYER ---
+  connectWebSocketServer(onReadyCallback, onErrorCallback) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (onReadyCallback) onReadyCallback();
+      return;
+    }
 
-    let currentBrokerIdx = 0;
-    let isInitialConnect = true;
+    if (this.ws) {
+      try { this.ws.close(); } catch (e) {}
+      this.ws = null;
+    }
 
-    const tryConnect = () => {
-      const url = brokerUrls[currentBrokerIdx];
-      this.roomTopic = `shangotw/room/${roomId}`;
+    let serverUrl = `ws://${window.location.host}`;
+    if (window.location.protocol === 'https:') {
+      serverUrl = `wss://${window.location.host}`;
+    }
+    if (!window.location.host || window.location.protocol === 'file:') {
+      serverUrl = 'ws://localhost:3000';
+    }
 
-      try {
-        if (this.mqttClient) {
-          try { this.mqttClient.end(true); } catch (e) {}
+    try {
+      this.ws = new WebSocket(serverUrl);
+
+      this.ws.onopen = () => {
+        console.log('🌐 Подключено к игровому WebSocket серверу:', serverUrl);
+        if (onReadyCallback) onReadyCallback();
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.handleIncomingServerMessage(data);
+        } catch (e) {
+          console.error('Ошибка парсинга сообщения сервера:', e);
         }
+      };
 
-        this.mqttClient = mqtt.connect(url, {
-          clientId: this.myPlayerId,
-          clean: true,
-          keepalive: 30,
-          connectTimeout: 5000,
-          reconnectPeriod: 2000
-        });
+      this.ws.onerror = (err) => {
+        console.warn('Ошибка подключения к серверу:', err);
+        if (onErrorCallback) onErrorCallback(err);
+      };
 
-        this.mqttClient.on('connect', () => {
-          this.mqttClient.subscribe(this.roomTopic, { qos: 1 }, (err) => {
-            if (!err) {
-              if (isInitialConnect) {
-                isInitialConnect = false;
-                if (onReadyCallback) onReadyCallback();
-              } else {
-                console.log('🌐 MQTT бесшовно переподключен в фоне.');
-                if (this.isMatchActive && !this.isGameOver) {
-                  this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
-                  this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
-                }
-              }
-            }
-          });
-        });
-
-        this.mqttClient.on('message', (topic, message) => {
-          try {
-            const data = JSON.parse(message.toString());
-            if (data.senderId === this.myPlayerId) return; // ignore own messages
-            this.handleIncomingNetMessage(data);
-          } catch (e) {
-            console.error('MQTT Parse Error:', e);
-          }
-        });
-
-        this.mqttClient.on('error', (err) => {
-          console.warn('Broker failed:', url, err);
-          if (currentBrokerIdx < brokerUrls.length - 1) {
-            currentBrokerIdx++;
-            tryConnect();
-          } else if (onErrorCallback) {
-            onErrorCallback(err);
-          }
-        });
-      } catch (e) {
-        if (onErrorCallback) onErrorCallback(e);
-      }
-    };
-
-    tryConnect();
-  }
-
-  sendNetAction(action, payload = {}) {
-    if (this.mqttClient && this.mqttClient.connected && this.roomTopic) {
-      const packet = JSON.stringify({
-        senderId: this.myPlayerId,
-        action: action,
-        payload: payload,
-        timestamp: Date.now()
-      });
-      this.mqttClient.publish(this.roomTopic, packet, { qos: 1 });
+      this.ws.onclose = () => {
+        console.log('🔌 Соединение с сервером закрыто.');
+      };
+    } catch (e) {
+      if (onErrorCallback) onErrorCallback(e);
     }
   }
 
-  handleIncomingNetMessage(data) {
-    if (!data || !data.action) return;
+  sendServerCommand(action, payload = {}) {
+    if (this.isMultiplayer && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'COMMAND',
+        action: action,
+        payload: payload
+      }));
+    } else if (this.localCore) {
+      this.localCore.handleAction(this.myPlayerId || 'p1', action, payload);
+    }
+  }
 
-    switch (data.action) {
-      case 'GUEST_JOINED': {
-        if (this.isHost) {
-          if (this.isMatchActive && !this.isGameOver) {
-            console.log('Игнорирован повторный GUEST_JOINED во время активного матча');
-            this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
-            this.sendNetAction('LIVES_SYNC', { lives: this.player.lives });
-            return;
-          }
-          this.sendNetAction('MATCH_START', { hostId: this.myPlayerId });
-          const modal = document.getElementById('mp-modal');
-          if (modal) modal.classList.add('hidden');
-          this.startMultiplayerSession(true);
+  handleIncomingServerMessage(data) {
+    if (!data || !data.type) return;
+
+    switch (data.type) {
+      case 'ROOM_CREATED': {
+        this.roomId = data.roomId;
+        this.myPlayerId = data.playerId || 'p1';
+        this.isHost = true;
+        const hostCodeText = document.getElementById('mp-host-code');
+        const hostStatus = document.getElementById('mp-host-status');
+        if (hostCodeText) hostCodeText.innerText = data.roomId;
+        if (hostStatus) {
+          hostStatus.innerText = 'Комната готова! Ожидание входа второго игрока...';
+          hostStatus.style.color = '#38bdf8';
         }
         break;
       }
 
       case 'MATCH_START': {
-        if (this.isMatchActive && !this.isGameOver) {
-          console.log('Игнорирован повторный MATCH_START во время активного матча');
-          return;
-        }
+        this.roomId = data.roomId;
+        this.myPlayerId = data.playerId;
+        this.isHost = (data.role === 'host');
         const modal = document.getElementById('mp-modal');
         if (modal) modal.classList.add('hidden');
-        this.startMultiplayerSession(false);
+        this.startMultiplayerSession(this.isHost);
         break;
       }
 
-      case 'BUILD_TOWER': {
-        const towerDef = BALANCE.TOWERS.find(t => t.id === data.payload.towerId);
-        if (towerDef) {
-          this.placeTower(this.enemy, data.payload.gx, data.payload.gy, towerDef, false, false);
-          this.logEvent(`🔨 Соперник построил: ${towerDef.name}`, 'log-income');
+      case 'SNAPSHOT': {
+        this.handleServerSnapshot(data.snapshot);
+        break;
+      }
+
+      case 'COMMAND_REJECTED': {
+        this.logEvent(`⚠️ Действие отклонено сервером: ${data.reason}`, 'log-leak');
+        break;
+      }
+
+      case 'PLAYER_DISCONNECTED': {
+        this.logEvent(`❌ ${data.message || 'Соперник отключился от игры!'}`, 'log-leak');
+        break;
+      }
+    }
+  }
+
+  handleServerSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    this.gameState = snapshot.gameState;
+    this.prepTimer = snapshot.prepTimer;
+    this.gameTimeSeconds = snapshot.gameTime;
+    this.incomeTimer = snapshot.incomeTimer;
+    this.gameSpeed = snapshot.gameSpeed;
+
+    if (snapshot.mapId && (!this.activeMap || this.activeMap.id !== snapshot.mapId)) {
+      this.setMap(snapshot.mapId);
+    }
+
+    const myKey = (this.myPlayerId === 'p2') ? 'p2' : 'p1';
+    const enemyKey = (myKey === 'p1') ? 'p2' : 'p1';
+
+    const myData = snapshot.players && snapshot.players[myKey];
+    const enemyData = snapshot.players && snapshot.players[enemyKey];
+
+    if (myData) {
+      this.player.gold = myData.gold;
+      this.player.income = myData.income;
+      this.player.lives = myData.lives;
+      this.player.tier = myData.tier;
+      this.myReadyState = myData.ready;
+
+      if (myData.creepSlots) {
+        this.player.creepSlots = myData.creepSlots.map(s => {
+          const tierData = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
+          const def = tierData[s.index] || tierData[0];
+          return {
+            index: s.index,
+            def: def,
+            charges: s.charges,
+            initialCooldownRemaining: s.cdRemaining,
+            stackTimer: s.stackTimer
+          };
+        });
+      }
+    }
+
+    if (enemyData) {
+      this.enemy.gold = enemyData.gold;
+      this.enemy.income = enemyData.income;
+      this.enemy.lives = enemyData.lives;
+      this.enemy.tier = enemyData.tier;
+      this.enemyReadyState = enemyData.ready;
+    }
+
+    // Sync Towers
+    this._syncTowersFromSnapshot(this.player, snapshot.towers ? snapshot.towers[myKey] : []);
+    this._syncTowersFromSnapshot(this.enemy, snapshot.towers ? snapshot.towers[enemyKey] : []);
+
+    // Sync Creeps with Smooth Interpolation
+    this._syncCreepsFromSnapshot(this.player, snapshot.creeps ? snapshot.creeps[myKey] : []);
+    this._syncCreepsFromSnapshot(this.enemy, snapshot.creeps ? snapshot.creeps[enemyKey] : []);
+
+    // Sync Projectiles
+    this.projectiles = (snapshot.projectiles || []).map(p => ({
+      ...p,
+      lane: (p.playerId === this.myPlayerId) ? 'player' : 'enemy'
+    }));
+
+    // Process Events
+    if (snapshot.events && snapshot.events.length > 0) {
+      for (const ev of snapshot.events) {
+        this._processServerEvent(ev);
+      }
+    }
+
+    // Check Game Over
+    if (this.gameState === 'GAME_OVER' && !this.isGameOver) {
+      this.isGameOver = true;
+      const isVictory = snapshot.winnerId === this.myPlayerId;
+      this.triggerGameOver(isVictory);
+    }
+
+    this.updateHUD();
+    this.updatePrepUI();
+  }
+
+  _syncTowersFromSnapshot(agent, serverTowers) {
+    if (!serverTowers) return;
+
+    let changed = (agent.towers.length !== serverTowers.length);
+    if (!changed) {
+      for (let i = 0; i < serverTowers.length; i++) {
+        if (agent.towers[i].x !== serverTowers[i].x || agent.towers[i].y !== serverTowers[i].y || (agent.towers[i].def && agent.towers[i].def.id !== serverTowers[i].defId)) {
+          changed = true;
+          break;
         }
-        break;
       }
+    }
 
-      case 'UPGRADE_TOWER': {
-        const targetTower = this.enemy.grid[data.payload.gy] && this.enemy.grid[data.payload.gy][data.payload.gx];
-        const nextDef = BALANCE.TOWERS.find(t => t.id === data.payload.nextDefId);
-        if (targetTower && nextDef) {
-          targetTower.def = nextDef;
-          this.logEvent(`⬆️ Соперник улучшил башню до «${nextDef.name}»!`, 'log-income');
+    if (changed) {
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          agent.grid[y][x] = null;
         }
-        break;
       }
 
-      case 'SELL_TOWER': {
-        const targetTower = this.enemy.grid[data.payload.gy] && this.enemy.grid[data.payload.gy][data.payload.gx];
-        if (targetTower) {
-          for (let dy = 0; dy < 2; dy++) {
-            for (let dx = 0; dx < 2; dx++) {
-              this.enemy.grid[targetTower.y + dy][targetTower.x + dx] = null;
+      agent.towers = serverTowers.map(st => {
+        const towerDef = BALANCE.TOWERS.find(t => t.id === st.defId) || BALANCE.TOWERS[0];
+        const tower = {
+          id: st.id,
+          def: towerDef,
+          x: st.x,
+          y: st.y,
+          level: st.level,
+          kills: st.kills,
+          totalDamageDealt: st.damageDealt
+        };
+
+        for (let dy = 0; dy < 2; dy++) {
+          for (let dx = 0; dx < 2; dx++) {
+            if (st.y + dy < this.height && st.x + dx < this.width) {
+              agent.grid[st.y + dy][st.x + dx] = tower;
             }
           }
-          const idx = this.enemy.towers.indexOf(targetTower);
-          if (idx !== -1) this.enemy.towers.splice(idx, 1);
-          this.recalculateCreepPaths(this.enemy);
-          this.logEvent(`💰 Соперник продал башню.`, 'log-income');
+        }
+        return tower;
+      });
+
+      this.recalculateCreepPaths(agent);
+    } else {
+      for (let i = 0; i < serverTowers.length; i++) {
+        agent.towers[i].kills = serverTowers[i].kills;
+        agent.towers[i].totalDamageDealt = serverTowers[i].damageDealt;
+      }
+    }
+  }
+
+  _syncCreepsFromSnapshot(agent, serverCreeps) {
+    if (!serverCreeps) return;
+
+    const existingMap = new Map();
+    for (const c of agent.creeps) {
+      existingMap.set(c.id, c);
+    }
+
+    const updatedList = [];
+
+    for (const sc of serverCreeps) {
+      let creep = existingMap.get(sc.id);
+      if (creep) {
+        creep.targetX = sc.x;
+        creep.targetY = sc.y;
+        creep.hp = sc.hp;
+        creep.maxHp = sc.maxHp;
+        creep.armor = sc.armor;
+        creep.speed = sc.speed;
+        creep.slow = sc.slow;
+        creep.poison = sc.poison;
+      } else {
+        creep = {
+          id: sc.id,
+          name: sc.name,
+          icon: sc.icon,
+          tier: sc.tier,
+          hp: sc.hp,
+          maxHp: sc.maxHp,
+          armor: sc.armor,
+          speed: sc.speed,
+          x: sc.x,
+          y: sc.y,
+          targetX: sc.x,
+          targetY: sc.y,
+          slow: sc.slow,
+          poison: sc.poison
+        };
+      }
+      updatedList.push(creep);
+    }
+
+    agent.creeps = updatedList;
+  }
+
+  _processServerEvent(ev) {
+    switch (ev.type) {
+      case 'BATTLE_STARTED': {
+        this.startBattlePhase(ev.mapId);
+        break;
+      }
+      case 'TOWER_BUILT': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.build();
+          this.logEvent(`🔨 Построена башня (-🪙${ev.cost})`, 'log-income');
+        } else {
+          this.logEvent(`🔨 Соперник построил башню`, 'log-income');
         }
         break;
       }
-
-      case 'SEND_CREEP': {
-        const creepList = BALANCE.CREEPS_BY_TIER[data.payload.tier] || BALANCE.CREEPS_BY_TIER[1];
-        const creepDef = creepList[data.payload.slotIndex];
-        if (creepDef) {
-          this.spawnCreep(this.enemy, this.player, creepDef);
-          this.logEvent(`⚠️ Соперник отправил на вас ${creepDef.name}!`, 'log-leak');
+      case 'TOWER_UPGRADED': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.build();
+          this.logEvent(`⬆️ Башня улучшена (-🪙${ev.cost})`, 'log-income');
+        } else {
+          this.logEvent(`⬆️ Соперник улучшил башню`, 'log-income');
+        }
+        break;
+      }
+      case 'TOWER_SOLD': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.coin();
+          this.logEvent(`💰 Башня продана (+🪙${ev.refund})`, 'log-income');
+        } else {
+          this.logEvent(`💰 Соперник продал башню`, 'log-income');
+        }
+        break;
+      }
+      case 'CREEP_SENT': {
+        if (ev.senderId === this.myPlayerId) {
+          this.sound.coin();
+          this.logEvent(`👾 Отправлен ${ev.creepName} (+${ev.income} инком)`, 'log-spawn');
+        } else {
           this.sound.leak();
+          this.logEvent(`⚠️ Соперник отправил на вас ${ev.creepName}!`, 'log-leak');
         }
         break;
       }
-
-      case 'TIER_UPGRADE': {
-        this.enemy.tier = data.payload.tier;
-        this.initCreepSlots(this.enemy);
-        this.logEvent(`🌟 Соперник перешел на ТИР ${data.payload.tier}!`, 'log-kill');
-        break;
-      }
-
-      case 'LIVES_SYNC': {
-        this.enemy.lives = data.payload.lives;
-        this.updateHUD();
-        break;
-      }
-
-      case 'SPEED_VOTE': {
-        this.enemySpeedVote = Number(data.payload.speed) || 1;
-        this.recalculateEffectiveSpeed();
-        this.logEvent(`⚡ Соперник выбрал скорость ${this.enemySpeedVote}x (Итоговая: ${this.gameSpeed}x)`, 'log-income');
-        break;
-      }
-
-      case 'READY_VOTE': {
-        this.enemyReadyState = !!data.payload.ready;
-        if (data.payload.mapId) {
-          this.enemyMapVote = data.payload.mapId;
+      case 'TIER_UPGRADED': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.crit();
+          this.logEvent(`🌟 ТИР ПОВЫШЕН ДО ${ev.newTier}!`, 'log-kill');
+        } else {
+          this.logEvent(`🌟 Соперник перешел на ТИР ${ev.newTier}!`, 'log-kill');
         }
-        this.updatePrepUI();
-
-        if (this.enemyReadyState) {
-          this.logEvent(`🔔 Соперник готов к бою!`, 'log-income');
+        break;
+      }
+      case 'TOWER_SHOT': {
+        const isMyLane = (ev.playerId === this.myPlayerId && this.activeLane === 'player') ||
+                         (ev.playerId !== this.myPlayerId && this.activeLane === 'enemy');
+        if (isMyLane) {
+          this.sound.shoot();
         }
-
-        if (this.isHost && this.myReadyState && this.enemyReadyState) {
-          let finalMapId = this.myMapVote;
-          if (this.myMapVote === this.enemyMapVote) {
-            finalMapId = this.myMapVote;
+        break;
+      }
+      case 'CREEP_HIT': {
+        const isMyLane = (ev.playerId === this.myPlayerId && this.activeLane === 'player') ||
+                         (ev.playerId !== this.myPlayerId && this.activeLane === 'enemy');
+        if (isMyLane) {
+          if (ev.isCrit) {
+            this.sound.crit();
+            this.addFloatingText(ev.x, ev.y - 1.0, `💥${ev.damage}!`, '#ec4899', 1.2);
           } else {
-            const pool = [this.myMapVote, this.enemyMapVote];
-            finalMapId = pool[Math.floor(Math.random() * 2)];
+            this.sound.hit();
+            this.addFloatingText(ev.x, ev.y - 0.6, `${ev.damage}`, '#cbd5e1', 0.8);
           }
-          this.sendNetAction('BATTLE_START', { mapId: finalMapId });
-          this.startBattlePhase(finalMapId);
+          this.createHitSparks(ev.x, ev.y, '#38bdf8');
         }
         break;
       }
-
-      case 'CUSTOM_WALL_SYNC': {
-        this.enemyCustomWalls = data.payload.walls || [];
-        this.logEvent(`🧱 Соперник разместил блоки на вашем поле (${this.enemyCustomWalls.length}/10)...`, 'log-income');
+      case 'CREEP_KILLED': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.coin();
+          this.addFloatingText(ev.x, ev.y, `+🪙${ev.bounty}`, '#f59e0b', 1.0);
+          this.logEvent(`💀 Убит ${ev.name} (+🪙${ev.bounty})`, 'log-kill');
+        }
+        this.createDeathBurst(ev.x, ev.y, '#f59e0b');
         break;
       }
-
-      case 'BATTLE_START': {
-        const resolvedMapId = data.payload ? data.payload.mapId : this.myMapVote;
-        this.startBattlePhase(resolvedMapId);
+      case 'CREEP_LEAKED': {
+        if (ev.playerId === this.myPlayerId) {
+          this.sound.leak();
+          this.addFloatingText(ev.x, ev.y, `-1 ❤️`, '#ef4444', 1.4);
+          this.logEvent(`🚨 УТЕЧКА! ${ev.creepName} прошел базу (-1 ❤️)!`, 'log-leak');
+        } else {
+          this.logEvent(`🎯 Твой ${ev.creepName} прошел базу соперника!`, 'log-income');
+        }
+        break;
+      }
+      case 'INCOME_PAYOUT': {
+        this.sound.coin();
+        this.logEvent(`💰 Получен инком: +🪙${this.player.income}`, 'log-income');
+        this.addFloatingText(this.width / 2, 4, `+🪙${this.player.income}`, '#10b981');
         break;
       }
     }
@@ -2937,22 +3015,26 @@ class TowerWarsGame {
     if (btnCreateRoom) {
       btnCreateRoom.addEventListener('click', () => {
         this.sound.init();
-        const code = String(Math.floor(1000 + Math.random() * 9000));
         this.isHost = true;
 
         btnCreateRoom.style.display = 'none';
         if (hostCodeBox) hostCodeBox.classList.remove('hidden');
-        if (hostCodeText) hostCodeText.innerText = code;
-        if (hostStatus) hostStatus.innerText = 'Подключение к глобальной сети...';
+        if (hostCodeText) hostCodeText.innerText = '----';
+        if (hostStatus) {
+          hostStatus.innerText = 'Подключение к защищенному серверу...';
+          hostStatus.style.color = '#38bdf8';
+        }
 
-        this.connectMqttBroker(
-          code,
+        this.connectWebSocketServer(
           () => {
-            if (hostStatus) hostStatus.innerText = 'Комната готова! Ожидание входа второго игрока...';
+            this.ws.send(JSON.stringify({
+              type: 'CREATE_ROOM',
+              playerName: 'Хост'
+            }));
           },
           (err) => {
             if (hostStatus) {
-              hostStatus.innerText = 'Ошибка сети. Попробуйте еще раз.';
+              hostStatus.innerText = 'Сервер недоступен. Запустите node server.js';
               hostStatus.style.color = '#ef4444';
             }
           }
@@ -2981,17 +3063,20 @@ class TowerWarsGame {
         }
 
         this.isHost = false;
-        joinStatus.innerText = 'Вход в комнату и поиск хоста...';
+        joinStatus.innerText = 'Подключение к защищенному серверу...';
         joinStatus.style.color = '#38bdf8';
 
-        this.connectMqttBroker(
-          code,
+        this.connectWebSocketServer(
           () => {
-            joinStatus.innerText = 'Связь установлена! Запуск матча...';
-            this.sendNetAction('GUEST_JOINED', { guestId: this.myPlayerId });
+            joinStatus.innerText = `Вход в комнату ${code}...`;
+            this.ws.send(JSON.stringify({
+              type: 'JOIN_ROOM',
+              roomId: code,
+              playerName: 'Гость'
+            }));
           },
           (err) => {
-            joinStatus.innerText = 'Не удалось подключиться к комнате.';
+            joinStatus.innerText = 'Не удалось подключиться к серверу';
             joinStatus.style.color = '#ef4444';
           }
         );
@@ -3005,23 +3090,23 @@ class TowerWarsGame {
     this.isGameOver = false;
     this.isMatchActive = true;
     this.gameTimeSeconds = 0;
-    this.incomeTimer = BALANCE.MAP.INCOME_INTERVAL_SEC;
+    this.incomeTimer = BALANCE.MAP_CONFIG.INCOME_INTERVAL_SEC;
 
     // Reset boards for clean match
     this.player.towers = [];
     this.player.grid = Array.from({ length: this.height }, () => Array(this.width).fill(null));
     this.player.creeps = [];
-    this.player.gold = BALANCE.MAP.STARTING_GOLD;
-    this.player.income = BALANCE.MAP.STARTING_INCOME;
-    this.player.lives = BALANCE.MAP.STARTING_LIVES;
+    this.player.gold = BALANCE.MAP_CONFIG.STARTING_GOLD;
+    this.player.income = BALANCE.MAP_CONFIG.STARTING_INCOME;
+    this.player.lives = BALANCE.MAP_CONFIG.STARTING_LIVES;
     this.player.tier = 1;
 
     this.enemy.towers = [];
     this.enemy.grid = Array.from({ length: this.height }, () => Array(this.width).fill(null));
     this.enemy.creeps = [];
-    this.enemy.gold = BALANCE.MAP.STARTING_GOLD;
-    this.enemy.income = BALANCE.MAP.STARTING_INCOME;
-    this.enemy.lives = BALANCE.MAP.STARTING_LIVES;
+    this.enemy.gold = BALANCE.MAP_CONFIG.STARTING_GOLD;
+    this.enemy.income = BALANCE.MAP_CONFIG.STARTING_INCOME;
+    this.enemy.lives = BALANCE.MAP_CONFIG.STARTING_LIVES;
     this.enemy.tier = 1;
 
     this.projectiles = [];
@@ -3036,7 +3121,7 @@ class TowerWarsGame {
 
     const modeBadge = document.getElementById('game-mode-badge');
     if (modeBadge) {
-      modeBadge.innerText = isHost ? '👑 1v1 PvP (Хост)' : '🎮 1v1 PvP (Клиент)';
+      modeBadge.innerText = isHost ? '👑 1v1 PvP (Хост - Сервер)' : '🎮 1v1 PvP (Клиент - Сервер)';
       modeBadge.style.background = '#10b981';
       modeBadge.style.color = '#fff';
     }
@@ -3045,7 +3130,7 @@ class TowerWarsGame {
     if (enemyLabel) enemyLabel.innerText = 'БАЗА СОПЕРНИКА';
 
     this.sound.crit();
-    this.logEvent(`🌐 ПОДКЛЮЧЕНО! Начался реальный PvP 1v1 матч по сети!`, 'log-kill');
+    this.logEvent(`🌐 ПОДКЛЮЧЕНО! Начался защищенный 1v1 PvP матч на сервере!`, 'log-kill');
     this.updateHUD();
     this.recalculateEffectiveSpeed();
 
@@ -3054,7 +3139,7 @@ class TowerWarsGame {
     this.recalculateCreepPaths(this.enemy);
 
     // Sync initial speed choice
-    this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+    this.sendServerCommand('SPEED_VOTE', { speed: this.mySpeedVote });
 
     // Start 60-second preparation phase with character / deck selection
     this.startPreparationPhase();
@@ -3334,10 +3419,6 @@ class TowerWarsGame {
           this.recalculateCreepPaths(this.player);
           this.renderTowerSelector();
           this.updateHUD();
-
-          if (this.isMultiplayer) {
-            this.sendNetAction('CUSTOM_WALL_SYNC', { walls: this.placedCustomWalls });
-          }
           return;
         }
       }
@@ -3400,10 +3481,6 @@ class TowerWarsGame {
               this.recalculateCreepPaths(this.player);
               this.renderTowerSelector();
               this.updateHUD();
-
-              if (this.isMultiplayer) {
-                this.sendNetAction('CUSTOM_WALL_SYNC', { walls: this.placedCustomWalls });
-              }
               return;
             }
           }
@@ -3484,7 +3561,7 @@ class TowerWarsGame {
         this.recalculateEffectiveSpeed();
         this.logEvent(`⚡ Вы выбрали скорость ${this.mySpeedVote}x (Итоговая скорость игры: ${this.gameSpeed}x)`, 'log-income');
         if (this.isMultiplayer) {
-          this.sendNetAction('SPEED_VOTE', { speed: this.mySpeedVote });
+          this.sendServerCommand('SPEED_VOTE', { speed: this.mySpeedVote });
         }
       });
     });

@@ -1,6 +1,6 @@
 /**
- * Tower Wars - Dedicated Multiplayer Game Server
- * Provides HTTP static file hosting + real-time WebSocket Room Synchronization.
+ * Tower Wars - Dedicated Authoritative Game Server
+ * Provides HTTP static file hosting + 30 FPS Authoritative WebSocket Simulation Engine.
  */
 
 const http = require('http');
@@ -8,9 +8,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { WebSocketServer, WebSocket } = require('ws');
+const { GameMatch } = require('./core.js');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
+const TICK_RATE = 30; // 30 authoritative simulation ticks per second
+const TICK_DT = 1 / TICK_RATE;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -47,7 +50,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// 2. Real-time WebSocket Server
+// 2. Real-time Authoritative WebSocket Server
 const wss = new WebSocketServer({ server });
 const rooms = new Map();
 
@@ -57,31 +60,81 @@ function sendJson(ws, data) {
   }
 }
 
+function startRoomSimulation(room) {
+  if (room.interval) return;
+
+  room.interval = setInterval(() => {
+    if (!room.match) return;
+
+    const effectiveDt = TICK_DT * (room.match.gameSpeed || 1);
+    room.match.step(effectiveDt);
+
+    const snapshot = room.match.getSnapshot();
+    const packet = JSON.stringify({
+      type: 'SNAPSHOT',
+      snapshot: snapshot
+    });
+
+    if (room.hostWs && room.hostWs.readyState === WebSocket.OPEN) {
+      room.hostWs.send(packet);
+    }
+    if (room.guestWs && room.guestWs.readyState === WebSocket.OPEN) {
+      room.guestWs.send(packet);
+    }
+  }, 1000 / TICK_RATE);
+}
+
+function stopRoomSimulation(room) {
+  if (room && room.interval) {
+    clearInterval(room.interval);
+    room.interval = null;
+  }
+}
+
 wss.on('connection', (ws) => {
   let currentRoomId = null;
-  let playerRole = null;
+  let playerId = null; // 'p1' (host) or 'p2' (guest)
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message.toString());
 
       switch (data.type) {
+        case 'PING': {
+          sendJson(ws, { type: 'PONG', timestamp: data.timestamp });
+          break;
+        }
+
         case 'CREATE_ROOM': {
           const roomId = String(Math.floor(1000 + Math.random() * 9000));
           currentRoomId = roomId;
-          playerRole = 'host';
+          playerId = 'p1';
 
-          rooms.set(roomId, {
+          const match = new GameMatch({
+            p1Id: 'p1',
+            p1Name: data.playerName || 'Игрок 1 (Хост)',
+            p2Id: 'p2',
+            p2Name: 'Игрок 2 (Гость)'
+          });
+
+          const room = {
             id: roomId,
             hostWs: ws,
             guestWs: null,
+            match: match,
+            interval: null,
             created: Date.now()
-          });
+          };
+
+          rooms.set(roomId, room);
 
           sendJson(ws, {
             type: 'ROOM_CREATED',
-            roomId: roomId
+            roomId: roomId,
+            playerId: 'p1',
+            role: 'host'
           });
+
           console.log(`[КОМНАТА СОЗДАНА] Код: ${roomId}`);
           break;
         }
@@ -101,36 +154,51 @@ wss.on('connection', (ws) => {
           }
 
           currentRoomId = roomId;
-          playerRole = 'guest';
+          playerId = 'p2';
           room.guestWs = ws;
+
+          if (data.playerName) {
+            room.match.players.p2.name = data.playerName;
+          }
 
           console.log(`[ИГРОК ПОДКЛЮЧИЛСЯ] Гость вошел в комнату ${roomId}`);
 
+          // Notify both players that match has initialized
           sendJson(room.hostWs, {
             type: 'MATCH_START',
             role: 'host',
+            playerId: 'p1',
+            opponentName: room.match.players.p2.name,
             roomId: roomId
           });
 
           sendJson(room.guestWs, {
             type: 'MATCH_START',
             role: 'guest',
+            playerId: 'p2',
+            opponentName: room.match.players.p1.name,
             roomId: roomId
           });
+
+          // Start authoritative 30 Hz simulation loop for this room
+          startRoomSimulation(room);
           break;
         }
 
-        case 'GAME_ACTION': {
-          if (!currentRoomId) return;
+        case 'COMMAND': {
+          if (!currentRoomId || !playerId) return;
           const room = rooms.get(currentRoomId);
-          if (!room) return;
+          if (!room || !room.match) return;
 
-          const targetWs = (playerRole === 'host') ? room.guestWs : room.hostWs;
-          if (targetWs) {
-            sendJson(targetWs, {
-              type: 'GAME_ACTION',
-              action: data.action,
-              payload: data.payload
+          const action = data.action;
+          const payload = data.payload || {};
+
+          const result = room.match.handleAction(playerId, action, payload);
+          if (!result.success) {
+            sendJson(ws, {
+              type: 'COMMAND_REJECTED',
+              action: action,
+              reason: result.reason
             });
           }
           break;
@@ -144,10 +212,16 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (currentRoomId && rooms.has(currentRoomId)) {
       const room = rooms.get(currentRoomId);
-      const otherWs = (playerRole === 'host') ? room.guestWs : room.hostWs;
-      if (otherWs) {
-        sendJson(otherWs, { type: 'PLAYER_DISCONNECTED', message: 'Соперник отключился от игры.' });
+      stopRoomSimulation(room);
+
+      const otherWs = (playerId === 'p1') ? room.guestWs : room.hostWs;
+      if (otherWs && otherWs.readyState === WebSocket.OPEN) {
+        sendJson(otherWs, {
+          type: 'PLAYER_DISCONNECTED',
+          message: 'Соперник отключился от игры.'
+        });
       }
+
       rooms.delete(currentRoomId);
       console.log(`[КОМНАТА ЗАКРЫТА] Код: ${currentRoomId}`);
     }
@@ -172,7 +246,7 @@ function getNetworkIps() {
 server.listen(PORT, '0.0.0.0', () => {
   const ips = getNetworkIps();
   console.log('======================================================================');
-  console.log(`⚔️  TOWER WARS СЕРВЕР ЗАПУЩЕН!`);
+  console.log(`⚔️  TOWER WARS ЗАЩИЩЕННЫЙ СЕРВЕР ЗАПУЩЕН! (30 FPS Headless Core)`);
   console.log('======================================================================');
   console.log(`👉 ВЫ ОТКРЫВАЕТЕ У СЕБЯ:   http://localhost:${PORT}`);
   console.log('----------------------------------------------------------------------');

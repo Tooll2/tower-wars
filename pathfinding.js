@@ -114,3 +114,8 @@ class PathFinder {
     return fullPath;
   }
 }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { PathFinder };
+}
+
