@@ -82,12 +82,12 @@
       </div>
       
       <div class="dev-group">
-        <span class="dev-label">🗺 Карта:</span>
-        <button class="dev-btn" data-dev-map="classic">🏰 Классика</button>
-        <button class="dev-btn" data-dev-map="zigzag">⚡ Зигзаг</button>
-        <button class="dev-btn" data-dev-map="spiral">🌀 Спираль</button>
-        <button class="dev-btn" data-dev-map="crossing">⚔️ Перекресток</button>
-        <button class="dev-btn" data-dev-map="custom">🛠️ Кастом</button>
+        <span class="dev-label">🗺 Уровень (Карта):</span>
+        <button class="dev-btn active" data-dev-map="classic">🏰 1. Классика</button>
+        <button class="dev-btn" data-dev-map="zigzag">⚡ 2. Зигзаг</button>
+        <button class="dev-btn" data-dev-map="spiral">🌀 3. Спираль</button>
+        <button class="dev-btn" data-dev-map="crossing">⚔️ 4. Перекресток</button>
+        <button class="dev-btn" data-dev-map="custom">🛠️ 5. Кастом</button>
       </div>
 
       <div class="dev-group">
@@ -261,10 +261,20 @@
 
               <!-- Creative Mode Direct Entry -->
               <div class="mp-creative-divider">
-                <span>или режим песочницы</span>
+                <span>или режим разработчика / песочницы</span>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;">
+                <label for="creative-map-select" style="font-size:0.75rem; font-weight:800; color:#38bdf8; text-align:left;">🗺 Выберите уровень (карту) для старта:</label>
+                <select id="creative-map-select" style="background:#0f172a; color:#ffffff; border:1px solid #475569; border-radius:6px; padding:6px 10px; font-size:0.8rem; font-weight:700; cursor:pointer; width:100%;">
+                  <option value="classic" selected>🏰 Уровень 1: Классика</option>
+                  <option value="zigzag">⚡ Уровень 2: Зигзаг</option>
+                  <option value="spiral">🌀 Уровень 3: Спираль</option>
+                  <option value="crossing">⚔️ Уровень 4: Перекресток</option>
+                  <option value="custom">🛠️ Уровень 5: Кастом (Архитектор)</option>
+                </select>
               </div>
               <div class="mp-input-group">
-                <input type="password" id="melafon-input" placeholder="Введите пароль..." maxlength="30" autocomplete="off">
+                <input type="password" id="melafon-input" placeholder="Пароль (TOOLL)..." maxlength="30" autocomplete="off">
                 <button id="mp-btn-creative-mode" class="btn-creative-full" style="width: auto; white-space: nowrap; padding: 0 16px;">🧪 Войти</button>
               </div>
               <p id="melafon-status-msg" class="mp-status-msg"></p>

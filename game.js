@@ -181,7 +181,7 @@ class TowerWarsGame {
     this.startEngine();
   }
 
-  startDevMode() {
+  startDevMode(mapId = null) {
     this.isDevMode = true;
     this.isCreativeMode = true;
     this.isMultiplayer = false;
@@ -202,11 +202,15 @@ class TowerWarsGame {
     this.enemy.lives = 999;
     this.enemy.tier = 3;
 
+    if (mapId) {
+      this.setMap(mapId);
+    } else {
+      this.recalculateCreepPaths(this.player);
+      this.recalculateCreepPaths(this.enemy);
+    }
+
     this.initCreepSlots(this.player);
     this.initCreepSlots(this.enemy);
-
-    this.recalculateCreepPaths(this.player);
-    this.recalculateCreepPaths(this.enemy);
 
     const modal = document.getElementById('mp-modal');
     if (modal) modal.classList.add('hidden');
@@ -243,8 +247,12 @@ class TowerWarsGame {
       modeBadge.style.fontWeight = '900';
     }
 
+    // Sync active map button in dev toolbar
+    const mapBtns = document.querySelectorAll('[data-dev-map]');
+    mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === (mapId || this.currentMapId)));
+
     this.sound.upgrade();
-    this.logEvent('🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Доступны все карты, расы, режим стен и бесконечные ресурсы.', 'log-kill');
+    this.logEvent(`🔧 РЕЖИМ РАЗРАБОТЧИКА (TOOLL) АКТИВИРОВАН! Уровень: ${this.activeMap.name}. Доступны все 5 карт, расы и ресурсы.`, 'log-kill');
     this.renderTowerSelector();
     this.updateHUD();
   }
@@ -264,11 +272,14 @@ class TowerWarsGame {
     const statusMsg = document.getElementById('melafon-status-msg');
 
     if (valid.includes(clean)) {
+      const mapSelect = document.getElementById('creative-map-select');
+      const selectedMap = mapSelect ? mapSelect.value : 'classic';
+
       if (statusMsg) {
         statusMsg.innerText = '✅ Доступ разработчика разрешен (TOOLL)! Запуск...';
         statusMsg.style.color = '#10b981';
       }
-      this.startDevMode();
+      this.startDevMode(selectedMap);
     } else {
       this.sound.leak();
       if (statusMsg) {
