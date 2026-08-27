@@ -2,13 +2,55 @@
 
 > **Project**: Tower Wars (2D 1v1 PvP Real-Time Strategy)  
 > **Repository**: [https://github.com/Tooll2/tower-wars](https://github.com/Tooll2/tower-wars)  
-> **Production Live URL**: [https://tooll2.github.io/tower-wars/](https://tooll2.github.io/tower-wars/)  
-> **OS Environment**: Windows (PowerShell)  
-> **Network Protocol**: Public MQTT over WebSockets (`wss://broker.emqx.io:8084/mqtt` / `wss://broker.hivemq.com:8884/mqtt`)
+> **Production Live Server**: [http://46.173.18.121:3000](http://46.173.18.121:3000)  
+> **Frontend Mirror (GitHub Pages)**: [https://tooll2.github.io/tower-wars/](https://tooll2.github.io/tower-wars/)  
+> **OS Environment**: Windows (PowerShell) local, Ubuntu Linux (systemd) on VPS  
+> **Architecture**: Authoritative Headless Game Server (30 FPS) + Client-Side Prediction (60 FPS Canvas) + 1-Click Matchmaking
 
 ---
 
-## 1. Language & Output Formatting
+## 1. Primary VPS Production & Deployment Protocol
+
+> [!IMPORTANT]
+> **VPS `46.173.18.121:3000` is the PRIMARY authoritative production host for the game.**  
+> All code changes, balance updates, server fixes, and client features MUST be pushed to GitHub and deployed to the VPS.
+
+### VPS Access Details
+| Parameter | Value |
+|---|---|
+| **Host IP** | `46.173.18.121` (Beget VPS «Stable Sorrel») |
+| **Port** | `3000` (HTTP + WebSocket) |
+| **SSH User** | `root` |
+| **SSH Key (Local Path)** | `C:\Users\А\.ssh\hermes_beget` |
+| **Server Code Directory** | `/opt/tower-wars` |
+| **Systemd Service** | `tower-wars.service` |
+
+### Neighbor Service Isolation Rule (CRITICAL)
+> [!CAUTION]
+> On this same VPS, the **Hermes Agent** service is running in `/opt/hermes-agent` (ports `9119` and `8642`).  
+> **NEVER kill, reboot, reconfigure, or interfere with Hermes processes or ports.**  
+> ONLY touch `/opt/tower-wars` and `tower-wars.service`.
+
+### Standard Full Deployment Pipeline (Run by AI Agents after changes)
+```bash
+# Step 1: Check syntax locally
+node -c balance.js; node -c pathfinding.js; node -c core.js; node -c server.js; node -c game.js
+
+# Step 2: Commit and push to GitHub
+git add .
+git commit -m "Descriptive summary of changes"
+git push origin master
+
+# Step 3: Pull on VPS and restart game service
+ssh -i "C:\Users\А\.ssh\hermes_beget" -o StrictHostKeyChecking=no root@46.173.18.121 "cd /opt/tower-wars && git pull origin master && systemctl restart tower-wars.service && systemctl status tower-wars.service --no-pager"
+
+# Step 4: Run integration & matchmaking test against live VPS
+node test_server_simulation.js
+```
+
+---
+
+## 2. Language & Output Formatting
 
 ### Language
 - Always respond in Russian unless the user explicitly writes in another language.
@@ -28,7 +70,7 @@
 
 ---
 
-## 2. Engineering Principles & Code Discipline
+## 3. Engineering Principles & Code Discipline
 
 ### Default Engineering Mode (`ponytail` / YAGNI)
 - **Hierarchy of Choice**: YAGNI → Existing project pattern → Native platform / Web API → Already-installed library → Minimum viable code.
@@ -50,62 +92,23 @@
 
 ---
 
-## 3. Subagent & Orchestration Discipline
-
-- **No Double Work**: When delegating work to a subagent, end the turn and do not inspect the same files in parallel.
-- **Direct Execution for Small Tasks**: If a task requires < 3 tool calls, do it directly instead of spawning a subagent.
-- **Confirmatory Checks Only**: When a subagent reports back, do at most 1–2 targeted verification checks rather than re-doing the whole search.
-
----
-
-## 4. Terminal & Workspace Rules (Windows)
-
-- Operating System: **Windows** (PowerShell / `pwsh`).
-- When searching files with `grep_search` / `rg` or `find_by_name`, always exclude heavy folders:
-  `node_modules`, `.git`, `.netlify`, `dist`, `vendor`, `brain`.
-- Before committing, always run a JS syntax check:
-  ```bash
-  node -c game.js; node -c balance.js; node -c pathfinding.js
-  ```
-
----
-
-## 5. Deployment & CI/CD Pipeline
-
-### Production Deployment (GitHub Pages)
-The site is hosted on GitHub Pages and automatically deploys on every push:
-```bash
-git add .
-git commit -m "Descriptive message"
-git push origin master
-```
-- **Production URL**: [https://tooll2.github.io/tower-wars/](https://tooll2.github.io/tower-wars/)
-- **Build Duration**: ~15–25 seconds.
-- **Status Check**: Run `gh run list` in terminal to monitor the GitHub Actions workflow.
-
-### Fallback Deployment (Surge.sh)
-If GitHub Pages is ever throttled or unavailable:
-```bash
-npx --yes surge . shango-tower-wars-pvp.surge.sh
-```
-
----
-
-## 6. Architecture & Core Systems
+## 4. Architecture & Core Systems
 
 ### File Layout
 | File | Responsibilities |
 |---|---|
-| [`index.html`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/index.html) | DOM hierarchy, HUD, speed controls, modal popups, Canvas wrapper. |
-| [`style.css`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/style.css) | Responsive layout, dark theme, radial clockwise cooldowns (`conic-gradient`), lane tabs. |
-| [`game.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/game.js) | Main loop (60 FPS), collision/combat, audio, mouse coordinates scaling, MQTT network manager. |
-| [`balance.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/balance.js) | Map metrics (70×66), 4 equal zones (11×11), wall (18×42), tower stats, 12 creep tiers, armor formula. |
-| [`pathfinding.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/pathfinding.js) | High-speed Grid A* algorithm with multi-point chained route calculation. |
-| [`.github/workflows/deploy.yml`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/.github/workflows/deploy.yml) | GitHub Actions workflow for automatic Pages publication. |
+| [`server.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/server.js) | Node.js HTTP static server, WebSocket hub, 30 FPS tick loop, 1-click Matchmaking queue (`FIND_MATCH`), room lifecycle, connection management. |
+| [`core.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/core.js) | Headless Authoritative Game Engine (`GameMatch`): full combat simulation, creep movement, tower targeting/DPS, armor reduction, income timer (15s), gold/bounty, anti-cheat validation, binary snapshot generator. |
+| [`game.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/game.js) | Client engine (60 FPS Canvas rendering, particle FX, sound manager, input scaling, zero-latency `pendingTowers` prediction, dead-reckoning creep interpolation, HUD). |
+| [`balance.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/balance.js) | Map metrics (70×66), 4 symmetric zones (11×11), central wall (18×42), tower definitions, 12 creep tiers, armor formula, income progression. |
+| [`pathfinding.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/pathfinding.js) | High-speed Grid A* with flat typed-array memory, `closedToken` generation tagging, multi-waypoint chaining, cycle guard. |
+| [`index.html`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/index.html) | DOM structure, Canvas wrapper, Matchmaking UI modal, Melafon sandbox entry, speed controls. |
+| [`style.css`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/style.css) | Dark theme, neon accents, responsive HUD layout, radial cooldowns (`conic-gradient`), matchmaking spinner. |
+| [`test_server_simulation.js`](file:///C:/Users/А/.gemini/antigravity/scratch/tower_wars_prototype/test_server_simulation.js) | Automated integration test script for matchmaking, room creation, combat snapshots, and anti-cheat checks against live VPS. |
 
 ### Map Coordinates & Scaling
 - **Internal Resolution**: 840 × 792 pixels (70 cells wide × 66 cells high, 12px cell size).
-- **Coordinate Scaling**: Always scale mouse input using:
+- **Coordinate Scaling**:
   `scaleX = 840 / canvas.getBoundingClientRect().width`
   `scaleY = 792 / canvas.getBoundingClientRect().height`
 - **4 Symmetrical Waypoint Zones (11 × 11 Cells)**:
@@ -115,35 +118,57 @@ npx --yes surge . shango-tower-wars-pvp.surge.sh
   - Exit Base (Bottom-Left): `{ x: 0, y: 55, w: 11, h: 11 }`
 - **Central Wall**: `{ x: 26, y: 24, w: 18, h: 42 }`
 
-### Harmonized Game Speed
-- Speed is always: `effectiveSpeed = Math.min(player1Vote, player2Vote)`.
-- Choices: `1x`, `2x`, `4x`.
+---
+
+## 5. Network Protocol & Actions (WebSocket)
+
+### 1-Click Matchmaking Flow
+1. Client sends `{ type: 'FIND_MATCH', playerName: '...' }`.
+2. If another player is waiting in `matchmakingQueue`, server immediately pairs them into a generated room.
+3. Both clients receive `MATCH_START` (`role: 'host' | 'guest'`, `roomId`, `playerId`).
+4. Server starts 30 Hz simulation loop (`startRoomSimulation`).
+5. Client sends `{ type: 'CANCEL_MATCHMAKING' }` if player cancels search.
+
+### Commands Sent by Client (`COMMAND`)
+| Action | Payload Example | Description |
+|---|---|---|
+| `READY_VOTE` | `{ ready: true, mapId: 'classic', raceId: 'humans' }` | Votes ready during preparation phase. |
+| `BUILD_TOWER` | `{ gx: 10, gy: 14, towerId: 'tower_base' }` | Builds tower at coordinates (verified by server). |
+| `UPGRADE_TOWER` | `{ gx: 10, gy: 14, nextDefId: 'gun_t1' }` | Upgrades existing tower (verified by server). |
+| `SELL_TOWER` | `{ gx: 10, gy: 14 }` | Sells tower and refunds gold (verified by server). |
+| `SEND_CREEP` | `{ tier: 1, slotIndex: 2 }` | Spawns creep in enemy lane, adds income (verified by server). |
+| `UPGRADE_TIER` | `{}` | Upgrades player tech tier (verified by server). |
+| `SPEED_VOTE` | `{ speed: 2 }` | Votes game speed (1x / 2x / 4x). |
+
+### Snapshots Sent by Server (`SNAPSHOT` @ 30 FPS)
+Contains:
+- `gameState`, `prepTimer`, `gameTime`, `incomeTimer`, `gameSpeed`
+- `players`: `{ p1: { gold, income, lives, tier, ready, creepSlots }, p2: ... }`
+- `towers`: `{ p1: [ { id, defId, x, y, level, kills, damageDealt } ], p2: [...] }`
+- `creeps`: `{ p1: [ { id, name, icon, tier, hp, maxHp, armor, speed, x, y, stage, slow, poison } ], p2: [...] }`
+- `events`: Array of discrete combat events (`TOWER_SHOT`, `CREEP_HIT`, `CREEP_KILLED`, `CREEP_LEAKED`, `INCOME_PAYOUT`, etc.)
 
 ---
 
-## 7. Network Protocol (MQTT WebSockets)
+## 6. Zero-Latency Prediction & Interpolation
 
-Room topic format: `shangotw/room/{ROOM_ID}` (4-digit room code).
-
-| Action | Direction | Payload Example | Description |
-|---|---|---|---|
-| `GUEST_JOINED` | Guest → Host | `{ guestId: "p_123" }` | Guest informs host of room entry. |
-| `MATCH_START` | Host → Guest | `{ hostId: "p_456" }` | Host triggers match start on both ends. |
-| `BUILD_TOWER` | Either → Opponent | `{ gx: 10, gy: 14, towerId: "basic" }` | Syncs tower placement. |
-| `UPGRADE_TOWER` | Either → Opponent | `{ gx: 10, gy: 14, nextDefId: "gun_t1" }` | Syncs tower upgrade. |
-| `SELL_TOWER` | Either → Opponent | `{ gx: 10, gy: 14 }` | Syncs tower sale and path recalculation. |
-| `SEND_CREEP` | Either → Opponent | `{ tier: 1, slotIndex: 2 }` | Spawns creep in opponent's lane. |
-| `TIER_UPGRADE` | Either → Opponent | `{ tier: 2 }` | Syncs player tier. |
-| `LIVES_SYNC` | Either → Opponent | `{ lives: 48 }` | Syncs remaining base lives. |
-| `SPEED_VOTE` | Either → Opponent | `{ speed: 4 }` | Syncs speed vote. |
+1. **Pending Towers (`this.pendingTowers`)**:
+   - When a player clicks to build a tower, client immediately places it on `agent.grid` (0 ms latency).
+   - Incoming snapshots do not erase the tower while it is pending confirmation from the server.
+   - Once server snapshot includes the tower, it is removed from `pendingTowers`.
+2. **Creep Interpolation**:
+   - Server sends creep positions at 30 FPS.
+   - Client smoothly steps creep position toward `(targetX, targetY)` every animation frame (60 FPS).
+3. **Opponent Lane Visibility**:
+   - Both player lane creeps and enemy lane creeps are broadcast in snapshots so players can see their attacks marching through the opponent's maze.
 
 ---
 
-## 8. Session Handoff Format
+## 7. Session Handoff Format
 
 When completing a session or passing context to another AI agent, provide a concise handoff:
 1. **Current Goal**: What was requested.
 2. **Files Touched**: Exact list of modified files.
 3. **Decisions Made & Implemented**: Key architectural and balance choices.
-4. **Verification Status**: Test results and live deployment URL.
+4. **Verification Status**: Test results and live deployment URL on VPS.
 5. **Concrete Next Steps**: Exactly what the next agent or developer should work on.
