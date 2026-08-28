@@ -97,6 +97,8 @@ class TowerWarsGame {
     this.selectedEntity = null;
     this.selectedTowers = [];
     this.selectionBox = { isSelecting: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
+    this.pendingCreepSends = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    this.pendingCreepTimestamps = [];
     this.previewUpgradeTower = null;
     this.hoverPreviewGuidePath = null;
     this.lastHoverGx = -1;
@@ -184,13 +186,13 @@ class TowerWarsGame {
       this.localCore.players.p1.gold = 999999999;
       this.localCore.players.p1.income = 999999;
       this.localCore.players.p1.lives = 999;
-      this.localCore.players.p1.tier = 3;
+      this.localCore.players.p1.tier = 1;
       this.localCore._initCreepSlots(this.localCore.players.p1);
 
       this.localCore.players.p2.gold = 999999999;
       this.localCore.players.p2.income = 999999;
       this.localCore.players.p2.lives = 999;
-      this.localCore.players.p2.tier = 3;
+      this.localCore.players.p2.tier = 1;
       this.localCore._initCreepSlots(this.localCore.players.p2);
 
       this.localCore.startBattlePhase(selectedMap);
@@ -200,12 +202,12 @@ class TowerWarsGame {
     this.player.gold = 999999999;
     this.player.income = 999999;
     this.player.lives = 999;
-    this.player.tier = 3;
+    this.player.tier = 1;
 
     this.enemy.gold = 999999999;
     this.enemy.income = 999999;
     this.enemy.lives = 999;
-    this.enemy.tier = 3;
+    this.enemy.tier = 1;
 
     this.setMap(selectedMap);
     this.initCreepSlots(this.player);
@@ -249,10 +251,16 @@ class TowerWarsGame {
     const mapBtns = document.querySelectorAll('[data-dev-map]');
     mapBtns.forEach(b => b.classList.toggle('active', b.dataset.devMap === selectedMap));
 
+    const tierBtns = document.querySelectorAll('[data-dev-tier]');
+    tierBtns.forEach(b => b.classList.toggle('active', Number(b.dataset.devTier) === 1));
+
     this.sound.upgrade();
     this.logEvent(`🔧 РЕЖИМ РАЗРАБОТЧИКА АКТИВИРОВАН! Уровень: ${this.activeMap.name}. Доступны все 5 карт, расы и ресурсы.`, 'log-kill');
     this.renderTowerSelector();
+    this.renderCreepButtons();
     this.updateHUD();
+    this.updateCreepUIRealtime();
+    this.recalculateEffectiveSpeed();
   }
 
   startCreativeMode() {
@@ -340,6 +348,16 @@ class TowerWarsGame {
       });
     });
 
+    // Tier switcher buttons
+    const tierBtns = document.querySelectorAll('[data-dev-tier]');
+    tierBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.sound.click();
+        const tier = Number(btn.dataset.devTier);
+        this.setDevTier(tier);
+      });
+    });
+
     // Toggle Architect Wall Building Mode
     const btnArchitect = document.getElementById('dev-btn-architect');
     if (btnArchitect) {
@@ -420,6 +438,22 @@ class TowerWarsGame {
         }
       });
     }
+  }
+
+  setDevTier(tier) {
+    if (tier < 1 || tier > 3) return;
+    this.player.tier = tier;
+    this.initCreepSlots(this.player);
+    if (this.localCore && this.localCore.players.p1) {
+      this.localCore.players.p1.tier = tier;
+      this.localCore._initCreepSlots(this.localCore.players.p1);
+    }
+    this.renderCreepButtons();
+    this.updateHUD();
+    this.updateCreepUIRealtime();
+    const tierBtns = document.querySelectorAll('[data-dev-tier]');
+    tierBtns.forEach(b => b.classList.toggle('active', Number(b.dataset.devTier) === tier));
+    this.logEvent(`🌟 DEV: Переключен ТИР ${tier}!`, 'log-kill');
   }
 
   renderCharacterSelection() {
@@ -1088,13 +1122,18 @@ class TowerWarsGame {
     if (!slot) return;
     if (slot.initialCooldownRemaining > 0) return;
     if (slot.charges <= 0) return;
-    if (this.player.gold < slot.def.cost) {
+    if (!this.isCreativeMode && this.player.gold < slot.def.cost) {
       this.logEvent(`⚠️ Недостаточно золота для ${slot.def.name}!`, 'log-leak');
       return;
     }
 
-    this.player.gold -= slot.def.cost;
-    slot.charges--;
+    if (!this.isCreativeMode) {
+      this.player.gold -= slot.def.cost;
+    }
+    slot.charges = Math.max(0, slot.charges - 1);
+    this.pendingCreepSends[slotIndex] = (this.pendingCreepSends[slotIndex] || 0) + 1;
+    this.pendingCreepTimestamps.push({ slotIndex, time: Date.now() });
+
     this.player.income += slot.def.income;
 
     this.sound.coin();
@@ -1103,6 +1142,7 @@ class TowerWarsGame {
     this.logEvent(`👾 Отправлен ${slot.def.name} (Инком: ${incSign})`, 'log-spawn');
 
     this.updateHUD();
+    this.updateCreepUIRealtime();
 
     if (this.isMultiplayer) {
       this.sendServerCommand('SEND_CREEP', {
@@ -1116,20 +1156,31 @@ class TowerWarsGame {
   upgradeTierAction() {
     if (this.player.tier >= 3) return;
     const upgradeCost = BALANCE.TIER_UPGRADE_COSTS[this.player.tier - 1];
-    if (this.player.gold < upgradeCost) {
+    if (!this.isCreativeMode && this.player.gold < upgradeCost) {
       this.logEvent(`⚠️ Недостаточно золота для апгрейда тира (🪙${upgradeCost})!`, 'log-leak');
       return;
     }
 
-    this.player.gold -= upgradeCost;
+    if (!this.isCreativeMode) {
+      this.player.gold -= upgradeCost;
+    }
     this.player.tier++;
     this.initCreepSlots(this.player);
+
+    if (this.localCore && this.localCore.players.p1) {
+      this.localCore.players.p1.tier = this.player.tier;
+      this.localCore._initCreepSlots(this.localCore.players.p1);
+    }
 
     this.sound.crit();
     this.logEvent(`🌟 ТИР ПОВЫШЕН ДО ${this.player.tier}! Открыты новые крипы.`, 'log-kill');
 
     this.updateHUD();
     this.renderCreepButtons();
+    this.updateCreepUIRealtime();
+
+    const tierBtns = document.querySelectorAll('[data-dev-tier]');
+    tierBtns.forEach(b => b.classList.toggle('active', Number(b.dataset.devTier) === this.player.tier));
 
     if (this.isMultiplayer) {
       this.sendServerCommand('TIER_UPGRADE', { tier: this.player.tier });
@@ -2010,7 +2061,7 @@ class TowerWarsGame {
       const upgradeCost = BALANCE.TIER_UPGRADE_COSTS[this.player.tier - 1];
       const upgradeBtn = document.createElement('button');
       upgradeBtn.className = 'btn-tier-upgrade';
-      upgradeBtn.disabled = this.player.gold < upgradeCost;
+      upgradeBtn.disabled = !this.isCreativeMode && (this.player.gold < upgradeCost);
       upgradeBtn.innerHTML = `
         <span>🌟 Апгрейд до ТИР ${this.player.tier + 1}</span>
         <span>🪙 ${upgradeCost}</span>
@@ -2042,7 +2093,7 @@ class TowerWarsGame {
       const timerText = btn.querySelector('.creep-cd-timer-text');
       const badge = btn.querySelector('.creep-charge-badge');
 
-      const isAffordable = (this.player.gold >= slot.def.cost);
+      const isAffordable = this.isCreativeMode || (this.player.gold >= slot.def.cost);
 
       if (slot.initialCooldownRemaining > 0) {
         // Initial Unlock Countdown (Clockwise Sweep)
@@ -2093,7 +2144,7 @@ class TowerWarsGame {
     const upgradeBtn = document.querySelector('.btn-tier-upgrade');
     if (upgradeBtn && this.player.tier < 3) {
       const upgradeCost = BALANCE.TIER_UPGRADE_COSTS[this.player.tier - 1];
-      upgradeBtn.disabled = this.player.gold < upgradeCost;
+      upgradeBtn.disabled = !this.isCreativeMode && (this.player.gold < upgradeCost);
     }
   }
 
@@ -2779,6 +2830,8 @@ class TowerWarsGame {
       }
 
       case 'COMMAND_REJECTED': {
+        this.pendingCreepSends = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.pendingCreepTimestamps = [];
         this.logEvent(`⚠️ Действие отклонено сервером: ${data.reason}`, 'log-leak');
         break;
       }
@@ -2792,6 +2845,18 @@ class TowerWarsGame {
 
   handleServerSnapshot(snapshot) {
     if (!snapshot) return;
+
+    // Expire pending creep send predictions older than 1200ms
+    const now = Date.now();
+    this.pendingCreepTimestamps = (this.pendingCreepTimestamps || []).filter(item => {
+      if (now - item.time > 1200) {
+        if (this.pendingCreepSends[item.slotIndex]) {
+          this.pendingCreepSends[item.slotIndex] = Math.max(0, this.pendingCreepSends[item.slotIndex] - 1);
+        }
+        return false;
+      }
+      return true;
+    });
 
     this.gameState = snapshot.gameState;
     this.prepTimer = snapshot.prepTimer;
@@ -2821,10 +2886,12 @@ class TowerWarsGame {
         this.player.creepSlots = myData.creepSlots.map(s => {
           const tierData = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
           const def = tierData[s.index] || tierData[0];
+          const pending = this.pendingCreepSends[s.index] || 0;
+          const predictedCharges = Math.max(0, s.charges - pending);
           return {
             index: s.index,
             def: def,
-            charges: s.charges,
+            charges: predictedCharges,
             initialCooldownRemaining: s.cdRemaining,
             stackTimer: s.stackTimer
           };
@@ -3074,6 +3141,11 @@ class TowerWarsGame {
       }
       case 'CREEP_SENT': {
         if (ev.senderId === this.myPlayerId) {
+          const tierList = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
+          const slotIdx = (ev.slotIndex !== undefined) ? ev.slotIndex : tierList.findIndex(c => c.name === ev.creepName);
+          if (slotIdx !== -1 && this.pendingCreepSends[slotIdx]) {
+            this.pendingCreepSends[slotIdx] = Math.max(0, this.pendingCreepSends[slotIdx] - 1);
+          }
           this.sound.coin();
           this.logEvent(`👾 Отправлен ${ev.creepName} (+${ev.income} инком)`, 'log-spawn');
         } else {
