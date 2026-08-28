@@ -99,6 +99,11 @@ class TowerWarsGame {
     this.selectionBox = { isSelecting: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
     this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    this.pendingGoldDelta = 0;
+    this.pendingIncomeDelta = 0;
+    this.pendingTowers = new Map();
+    this.pendingTowerUpgrades = new Map();
+    this.pendingTowerSales = new Map();
     this.previewUpgradeTower = null;
     this.hoverPreviewGuidePath = null;
     this.lastHoverGx = -1;
@@ -115,7 +120,6 @@ class TowerWarsGame {
     this.buildHistoryStack = [];
     this.lastDrawGx = -1;
     this.lastDrawGy = -1;
-    this.pendingTowers = new Map();
 
     // Lifecycle States: 'IDLE' (frozen at start), 'PREPARATION' (60s prep), 'BATTLE' (active match), 'CREATIVE'
     this.gameState = 'IDLE';
@@ -171,6 +175,13 @@ class TowerWarsGame {
     this.myPlayerId = 'p1';
     this.gameState = 'CREATIVE';
     this.gameTimeSeconds = 0;
+    this.pendingGoldDelta = 0;
+    this.pendingIncomeDelta = 0;
+    this.pendingTowers.clear();
+    this.pendingTowerUpgrades.clear();
+    this.pendingTowerSales.clear();
+    this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
     const selectedMap = mapId || this.currentMapId || 'classic';
 
@@ -1017,6 +1028,9 @@ class TowerWarsGame {
     if (deductCost && !this.isCreativeMode) {
       if (agent.gold < towerDef.cost) return false;
       agent.gold -= towerDef.cost;
+      if (agent === this.player) {
+        this.pendingGoldDelta -= towerDef.cost;
+      }
     }
 
     const tower = {
@@ -1047,6 +1061,8 @@ class TowerWarsGame {
 
       if (this.isMultiplayer) {
         this.sendServerCommand('BUILD_TOWER', { gx, gy, towerId: towerDef.id });
+      } else if (this.localCore) {
+        this.localCore.handleAction(this.myPlayerId || 'p1', 'BUILD_TOWER', { gx, gy, towerId: towerDef.id });
       }
     }
 
@@ -1133,11 +1149,13 @@ class TowerWarsGame {
 
     if (!this.isCreativeMode) {
       this.player.gold -= slot.def.cost;
+      this.pendingGoldDelta -= slot.def.cost;
     }
     slot.charges = Math.max(0, slot.charges - 1);
     this.localSentCreepCounts[slotIndex] = (this.localSentCreepCounts[slotIndex] || 0) + 1;
 
     this.player.income += slot.def.income;
+    this.pendingIncomeDelta += slot.def.income;
 
     this.sound.coin();
 
@@ -1166,6 +1184,7 @@ class TowerWarsGame {
 
     if (!this.isCreativeMode) {
       this.player.gold -= upgradeCost;
+      this.pendingGoldDelta -= upgradeCost;
     }
     this.player.tier++;
     this.initCreepSlots(this.player);
@@ -2374,10 +2393,13 @@ class TowerWarsGame {
         return;
       }
       this.player.gold -= actualCost;
+      this.pendingGoldDelta -= actualCost;
     }
 
     instance.def = nextDef;
     instance.level = (instance.level || 0) + 1;
+    this.pendingTowerUpgrades.set(`${instance.x},${instance.y}`, { nextDef, level: instance.level, timestamp: Date.now() });
+
     this.sound.build();
     this.logEvent(`⬆️ Башня улучшена до «${nextDef.name}»!`, 'log-income');
     this.showTowerInspectCard(nextDef, instance);
@@ -2395,6 +2417,8 @@ class TowerWarsGame {
 
     const refund = Math.round(instance.def.cost * 0.75);
     this.player.gold += refund;
+    this.pendingGoldDelta += refund;
+    this.pendingTowerSales.set(`${instance.x},${instance.y}`, { timestamp: Date.now() });
 
     for (let dy = 0; dy < 2; dy++) {
       for (let dx = 0; dx < 2; dx++) {
@@ -2440,97 +2464,68 @@ class TowerWarsGame {
     if (tag) tag.innerText = `Группа`;
 
     const details = document.getElementById('card-details');
+    if (details) {
+      let totalValue = 0;
+      let totalKills = 0;
+      let totalDmg = 0;
+      for (const t of towers) {
+        totalValue += t.def.cost || 0;
+        totalKills += t.kills || 0;
+        totalDmg += Math.round(t.totalDamageDealt || 0);
+      }
+
+      details.innerHTML = `
+        <div class="stat-line"><span>Количество:</span> <b>${towers.length} шт.</b></div>
+        <div class="stat-line"><span>Общая стоимость:</span> <b>🪙 ${totalValue}</b></div>
+        <div class="stat-line"><span>Всего фрагов:</span> <b>${totalKills}</b></div>
+        <div class="stat-line"><span>Общий урон:</span> <b>${totalDmg}</b></div>
+      `;
+    }
+
     const actions = document.getElementById('card-actions');
-    if (!details) return;
-
-    // Count tower types and calculate stats
-    const typeCounts = {};
-    let totalSellRefund = 0;
-    let totalUpgradeCostStandard = 0;
-    let totalUpgradeCostRacial = 0;
-    let standardUpgradableCount = 0;
-    let racialUpgradableCount = 0;
-
-    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
-
-    towers.forEach(t => {
-      typeCounts[t.def.name] = (typeCounts[t.def.name] || 0) + 1;
-      totalSellRefund += Math.round(t.def.cost * 0.75);
-
-      const nextStd = t.def.upgradeId ? BALANCE.TOWERS.find(x => x.id === t.def.upgradeId) : null;
-      const nextRacial = BALANCE.getRacialUpgrade(t.def, this.selectedCharacterId);
-      const cost = t.def.upgradeCost || 40;
-
-      if (nextStd && t.def.race === 'neutral') {
-        totalUpgradeCostStandard += cost;
-        standardUpgradableCount++;
-      }
-      if (nextRacial) {
-        totalUpgradeCostRacial += cost;
-        racialUpgradableCount++;
-      }
-    });
-
-    let breakdownHtml = Object.entries(typeCounts)
-      .map(([name, count]) => `<div class="stat-row"><span>${name}:</span><span class="stat-val-text">${count} шт.</span></div>`)
-      .join('');
-
-    details.innerHTML = `
-      ${breakdownHtml}
-      <hr style="border-color:#334155; margin: 6px 0;">
-      <div class="stat-row">
-        <span>Стоимость возврата:</span>
-        <span class="stat-val-text" style="color:#10b981; font-weight:700;">+🪙 ${totalSellRefund}</span>
-      </div>
-    `;
-
     if (actions) {
       actions.style.display = 'flex';
-      const upBtn = document.getElementById('btn-upgrade-tower');
-      const upRacialBtn = document.getElementById('btn-upgrade-racial');
-      const sellBtn = document.getElementById('btn-sell-tower');
+      actions.style.flexDirection = 'column';
+      actions.style.gap = '8px';
+      actions.innerHTML = `
+        <button id="btn-multi-upgrade-race" class="btn-action btn-upgrade">
+          👑 Улучшить в расовые
+        </button>
+        <button id="btn-multi-upgrade-neutral" class="btn-action btn-upgrade">
+          ⬆️ Улучшить нейтральные
+        </button>
+        <button id="btn-multi-sell" class="btn-action btn-sell">
+          💰 Продать все (${towers.length})
+        </button>
+      `;
 
-      if (upBtn) {
-        if (standardUpgradableCount > 0) {
-          upBtn.style.display = 'block';
-          upBtn.innerText = `Обычный (${standardUpgradableCount} шт. / 🪙 ${totalUpgradeCostStandard})`;
-          upBtn.onclick = () => {
-            this.upgradeMultipleTowers(towers, 'standard');
-          };
-          upBtn.onmouseenter = null;
-          upBtn.onmouseleave = null;
-        } else {
-          upBtn.style.display = 'none';
-          upBtn.onclick = null;
-        }
+      const btnUpRace = document.getElementById('btn-multi-upgrade-race');
+      if (btnUpRace) {
+        btnUpRace.addEventListener('click', () => {
+          this.sound.init();
+          this.upgradeMultipleTowers(towers, 'racial');
+        });
       }
 
-      if (upRacialBtn) {
-        if (racialUpgradableCount > 0) {
-          upRacialBtn.style.display = 'block';
-          const badge = charDef ? charDef.badge : 'Расовый';
-          upRacialBtn.innerText = `${charDef ? charDef.icon : '✨'} ${badge} (${racialUpgradableCount} шт. / 🪙 ${totalUpgradeCostRacial})`;
-          upRacialBtn.onclick = () => {
-            this.upgradeMultipleTowers(towers, 'racial');
-          };
-          upRacialBtn.onmouseenter = null;
-          upRacialBtn.onmouseleave = null;
-        } else {
-          upRacialBtn.style.display = 'none';
-          upRacialBtn.onclick = null;
-        }
+      const btnUpNeutral = document.getElementById('btn-multi-upgrade-neutral');
+      if (btnUpNeutral) {
+        btnUpNeutral.addEventListener('click', () => {
+          this.sound.init();
+          this.upgradeMultipleTowers(towers, 'neutral');
+        });
       }
 
-      if (sellBtn) {
-        sellBtn.innerText = `Продать все (+🪙 ${totalSellRefund})`;
-        sellBtn.onclick = () => {
+      const btnMultiSell = document.getElementById('btn-multi-sell');
+      if (btnMultiSell) {
+        btnMultiSell.addEventListener('click', () => {
+          this.sound.init();
           this.sellMultipleTowers(towers);
-        };
+        });
       }
     }
   }
 
-  upgradeMultipleTowers(towers, type = 'standard') {
+  upgradeMultipleTowers(towers, type = 'racial') {
     if (!towers || towers.length === 0) return;
     let upgradedCount = 0;
     let spentGold = 0;
@@ -2550,10 +2545,12 @@ class TowerWarsGame {
           break;
         }
         this.player.gold -= cost;
+        this.pendingGoldDelta -= cost;
       }
 
       instance.def = nextDef;
       instance.level = (instance.level || 0) + 1;
+      this.pendingTowerUpgrades.set(`${instance.x},${instance.y}`, { nextDef, level: instance.level, timestamp: Date.now() });
       spentGold += cost;
       upgradedCount++;
 
@@ -2581,6 +2578,8 @@ class TowerWarsGame {
       const refund = Math.round(instance.def.cost * 0.75);
       totalRefund += refund;
       this.player.gold += refund;
+      this.pendingGoldDelta += refund;
+      this.pendingTowerSales.set(`${instance.x},${instance.y}`, { timestamp: Date.now() });
 
       for (let dy = 0; dy < 2; dy++) {
         for (let dx = 0; dx < 2; dx++) {
@@ -2836,6 +2835,11 @@ class TowerWarsGame {
       case 'COMMAND_REJECTED': {
         this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.pendingGoldDelta = 0;
+        this.pendingIncomeDelta = 0;
+        this.pendingTowers.clear();
+        this.pendingTowerUpgrades.clear();
+        this.pendingTowerSales.clear();
         this.logEvent(`⚠️ Действие отклонено сервером: ${data.reason}`, 'log-leak');
         break;
       }
@@ -2875,8 +2879,8 @@ class TowerWarsGame {
 
     if (myData) {
       const oldTier = this.player.tier;
-      this.player.gold = myData.gold;
-      this.player.income = myData.income;
+      this.player.gold = this.isCreativeMode ? 999999999 : Math.max(0, myData.gold + this.pendingGoldDelta);
+      this.player.income = this.isCreativeMode ? 999999 : Math.max(0, myData.income + this.pendingIncomeDelta);
       this.player.lives = myData.lives;
       this.player.tier = myData.tier;
       this.myReadyState = myData.ready;
@@ -2938,20 +2942,31 @@ class TowerWarsGame {
     if (!serverTowers) return;
 
     if (agent === this.player) {
-      // 1. Remove confirmed pending towers
+      const now = Date.now();
+
+      // 1. Remove confirmed / expired pending towers (> 3.5s)
       for (const st of serverTowers) {
         this.pendingTowers.delete(`${st.x},${st.y}`);
       }
-
-      // 2. Drop expired pending towers (> 4s)
-      const now = Date.now();
       for (const [key, pending] of this.pendingTowers.entries()) {
-        if (now - pending.timestamp > 4000) {
+        if (now - pending.timestamp > 3500) {
           this.pendingTowers.delete(key);
         }
       }
 
-      // 3. Clear and rebuild grid
+      // Expire old pending upgrades / sales (> 3.5s)
+      for (const [key, pending] of this.pendingTowerUpgrades.entries()) {
+        if (now - pending.timestamp > 3500) {
+          this.pendingTowerUpgrades.delete(key);
+        }
+      }
+      for (const [key, pending] of this.pendingTowerSales.entries()) {
+        if (now - pending.timestamp > 3500) {
+          this.pendingTowerSales.delete(key);
+        }
+      }
+
+      // 2. Clear and rebuild grid
       for (let y = 0; y < this.height; y++) {
         for (let x = 0; x < this.width; x++) {
           agent.grid[y][x] = null;
@@ -2961,13 +2976,32 @@ class TowerWarsGame {
       const mergedTowers = [];
 
       for (const st of serverTowers) {
-        const towerDef = BALANCE.TOWERS.find(t => t.id === st.defId) || BALANCE.TOWERS[0];
+        // If tower is pending sold locally, skip adding to grid!
+        if (this.pendingTowerSales.has(`${st.x},${st.y}`)) {
+          continue;
+        }
+
+        const pendingUpgrade = this.pendingTowerUpgrades.get(`${st.x},${st.y}`);
+        let towerDef = BALANCE.TOWERS.find(t => t.id === st.defId) || BALANCE.TOWERS[0];
+        let level = st.level;
+
+        if (pendingUpgrade) {
+          if (st.defId === pendingUpgrade.nextDef.id) {
+            // Confirmed by server!
+            this.pendingTowerUpgrades.delete(`${st.x},${st.y}`);
+          } else {
+            // In flight: use predicted upgrade def!
+            towerDef = pendingUpgrade.nextDef;
+            level = pendingUpgrade.level;
+          }
+        }
+
         const tower = {
           id: st.id,
           def: towerDef,
           x: st.x,
           y: st.y,
-          level: st.level,
+          level: level,
           kills: st.kills,
           totalDamageDealt: st.damageDealt
         };
@@ -2982,7 +3016,7 @@ class TowerWarsGame {
         mergedTowers.push(tower);
       }
 
-      // 4. Re-apply unconfirmed pending towers onto the grid seamlessly
+      // 3. Re-apply unconfirmed pending built towers onto the grid seamlessly
       for (const pending of this.pendingTowers.values()) {
         const pt = pending.tower;
         let canReapply = true;
@@ -3005,6 +3039,26 @@ class TowerWarsGame {
 
       agent.towers = mergedTowers;
       this.recalculateCreepPaths(agent);
+
+      // 4. Synchronize selected entity reference smoothly so inspect card never breaks
+      if (this.selectedEntity && this.selectedEntity.x !== undefined && this.selectedEntity.y !== undefined) {
+        const currentTower = agent.grid[this.selectedEntity.y] && agent.grid[this.selectedEntity.y][this.selectedEntity.x];
+        if (currentTower) {
+          this.selectedEntity = currentTower;
+        } else {
+          this.selectedEntity = null;
+          const details = document.getElementById('card-details');
+          if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
+          const actions = document.getElementById('card-actions');
+          if (actions) actions.style.display = 'none';
+        }
+      }
+
+      if (this.selectedTowers && this.selectedTowers.length > 0) {
+        this.selectedTowers = this.selectedTowers.map(t => {
+          return (agent.grid[t.y] && agent.grid[t.y][t.x]) || null;
+        }).filter(Boolean);
+      }
     } else {
       // Enemy lane towers sync
       let changed = (agent.towers.length !== serverTowers.length);
@@ -3111,6 +3165,8 @@ class TowerWarsGame {
       }
       case 'TOWER_BUILT': {
         if (ev.playerId === this.myPlayerId) {
+          this.pendingGoldDelta = Math.min(0, this.pendingGoldDelta + (ev.cost || 0));
+          this.pendingTowers.delete(`${ev.gx},${ev.gy}`);
           this.sound.build();
           this.logEvent(`🔨 Построена башня (-🪙${ev.cost})`, 'log-income');
         } else {
@@ -3120,6 +3176,8 @@ class TowerWarsGame {
       }
       case 'TOWER_UPGRADED': {
         if (ev.playerId === this.myPlayerId) {
+          this.pendingGoldDelta = Math.min(0, this.pendingGoldDelta + (ev.cost || 0));
+          this.pendingTowerUpgrades.delete(`${ev.gx},${ev.gy}`);
           this.sound.build();
           this.logEvent(`⬆️ Башня улучшена (-🪙${ev.cost})`, 'log-income');
         } else {
@@ -3129,6 +3187,8 @@ class TowerWarsGame {
       }
       case 'TOWER_SOLD': {
         if (ev.playerId === this.myPlayerId) {
+          this.pendingGoldDelta = Math.max(0, this.pendingGoldDelta - (ev.refund || 0));
+          this.pendingTowerSales.delete(`${ev.gx},${ev.gy}`);
           this.sound.coin();
           this.logEvent(`💰 Башня продана (+🪙${ev.refund})`, 'log-income');
         } else {
@@ -3140,12 +3200,17 @@ class TowerWarsGame {
         if (ev.senderId === this.myPlayerId) {
           const tierList = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
           const slotIdx = (ev.slotIndex !== undefined) ? ev.slotIndex : tierList.findIndex(c => c.name === ev.creepName);
+          const creepDef = (slotIdx !== -1) ? tierList[slotIdx] : tierList.find(c => c.name === ev.creepName);
           if (slotIdx !== -1) {
             this.serverConfirmedCreepCounts[slotIdx] = (this.serverConfirmedCreepCounts[slotIdx] || 0) + 1;
             if (this.serverConfirmedCreepCounts[slotIdx] > (this.localSentCreepCounts[slotIdx] || 0)) {
               this.localSentCreepCounts[slotIdx] = this.serverConfirmedCreepCounts[slotIdx];
             }
           }
+          if (creepDef) {
+            this.pendingGoldDelta = Math.min(0, this.pendingGoldDelta + creepDef.cost);
+          }
+          this.pendingIncomeDelta = Math.max(0, this.pendingIncomeDelta - (ev.income || 0));
           this.sound.coin();
           this.logEvent(`👾 Отправлен ${ev.creepName} (+${ev.income} инком)`, 'log-spawn');
         } else {
@@ -3156,6 +3221,7 @@ class TowerWarsGame {
       }
       case 'TIER_UPGRADED': {
         if (ev.playerId === this.myPlayerId) {
+          this.pendingGoldDelta = Math.min(0, this.pendingGoldDelta + (ev.cost || 0));
           this.sound.crit();
           this.logEvent(`🌟 ТИР ПОВЫШЕН ДО ${ev.newTier}!`, 'log-kill');
         } else {
@@ -3446,6 +3512,13 @@ class TowerWarsGame {
     this.isMatchActive = true;
     this.gameTimeSeconds = 0;
     this.incomeTimer = BALANCE.MAP_CONFIG.INCOME_INTERVAL_SEC;
+    this.pendingGoldDelta = 0;
+    this.pendingIncomeDelta = 0;
+    this.pendingTowers.clear();
+    this.pendingTowerUpgrades.clear();
+    this.pendingTowerSales.clear();
+    this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
     // Reset boards for clean match
     this.player.towers = [];
