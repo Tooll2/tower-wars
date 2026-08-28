@@ -6,43 +6,18 @@
 class SoundFx {
   constructor() {
     this.ctx = null;
+    this.enabled = false;
   }
-  init() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) this.ctx = new AudioCtx();
-    }
-  }
-  playTone(freq, type = 'sine', duration = 0.1, gainVal = 0.1) {
-    if (!this.ctx) return;
-    try {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-      gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + duration);
-    } catch (e) {}
-  }
-  shoot() { this.playTone(480, 'triangle', 0.08, 0.05); }
-  hit() { this.playTone(180, 'square', 0.05, 0.04); }
-  crit() { this.playTone(850, 'sawtooth', 0.15, 0.08); }
-  coin() {
-    this.playTone(900, 'sine', 0.08, 0.06);
-    setTimeout(() => this.playTone(1300, 'sine', 0.12, 0.06), 60);
-  }
-  leak() { this.playTone(120, 'sawtooth', 0.3, 0.15); }
-  build() { this.playTone(350, 'sine', 0.07, 0.08); }
-  click() { this.playTone(600, 'sine', 0.04, 0.05); }
-  upgrade() {
-    this.playTone(520, 'sine', 0.08, 0.08);
-    setTimeout(() => this.playTone(780, 'sine', 0.12, 0.08), 70);
-  }
+  init() {}
+  playTone() {}
+  shoot() {}
+  hit() {}
+  crit() {}
+  coin() {}
+  leak() {}
+  build() {}
+  click() {}
+  upgrade() {}
 }
 
 class TowerWarsGame {
@@ -120,6 +95,8 @@ class TowerWarsGame {
     // Pre-select first tower ("Базовая вышка") so players can build immediately!
     this.selectedTowerToBuild = BALANCE.TOWERS[0];
     this.selectedEntity = null;
+    this.selectedTowers = [];
+    this.selectionBox = { isSelecting: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
     this.previewUpgradeTower = null;
     this.hoverPreviewGuidePath = null;
     this.lastHoverGx = -1;
@@ -1580,8 +1557,24 @@ class TowerWarsGame {
       }
     }
 
-    if (this.selectedEntity && this.selectedEntity.def && this.selectedEntity.def.range) {
-      const st = this.selectedEntity;
+    // Render Selected Towers Indicators
+    const towersToHighlight = (this.selectedTowers && this.selectedTowers.length > 0)
+      ? this.selectedTowers
+      : (this.selectedEntity ? [this.selectedEntity] : []);
+
+    for (const st of towersToHighlight) {
+      const tx = st.x * cs;
+      const ty = st.y * cs;
+      const tw = 2 * cs;
+      const th = 2 * cs;
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tx - 1, ty - 1, tw + 2, th + 2);
+    }
+
+    if (towersToHighlight.length === 1 && towersToHighlight[0].def && towersToHighlight[0].def.range) {
+      const st = towersToHighlight[0];
       ctx.strokeStyle = '#38bdf888';
       ctx.fillStyle = '#38bdf811';
       ctx.lineWidth = 1.5;
@@ -1601,6 +1594,22 @@ class TowerWarsGame {
         ctx.stroke();
         ctx.setLineDash([]);
       }
+    }
+
+    // Render Selection Box Marquee
+    if (this.selectionBox && this.selectionBox.isSelecting) {
+      const rx = Math.min(this.selectionBox.startX, this.selectionBox.currentX);
+      const ry = Math.min(this.selectionBox.startY, this.selectionBox.currentY);
+      const rw = Math.abs(this.selectionBox.currentX - this.selectionBox.startX);
+      const rh = Math.abs(this.selectionBox.currentY - this.selectionBox.startY);
+
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.setLineDash([]);
     }
 
     // 7. Creeps
@@ -2080,6 +2089,12 @@ class TowerWarsGame {
         }
       }
     });
+
+    const upgradeBtn = document.querySelector('.btn-tier-upgrade');
+    if (upgradeBtn && this.player.tier < 3) {
+      const upgradeCost = BALANCE.TIER_UPGRADE_COSTS[this.player.tier - 1];
+      upgradeBtn.disabled = this.player.gold < upgradeCost;
+    }
   }
 
   showCreepHoverDetails(creepDef) {
@@ -2335,6 +2350,9 @@ class TowerWarsGame {
     const idx = this.player.towers.indexOf(instance);
     if (idx !== -1) this.player.towers.splice(idx, 1);
 
+    const selIdx = this.selectedTowers.indexOf(instance);
+    if (selIdx !== -1) this.selectedTowers.splice(selIdx, 1);
+
     this.recalculateCreepPaths(this.player);
     this.selectedEntity = null;
     this.sound.coin();
@@ -2351,6 +2369,193 @@ class TowerWarsGame {
     } else if (this.localCore) {
       this.localCore.handleAction(this.myPlayerId || 'p1', 'SELL_TOWER', { gx: instance.x, gy: instance.y });
     }
+  }
+
+  showMultiTowerInspectCard(towers) {
+    if (!towers || towers.length === 0) return;
+    if (towers.length === 1) {
+      this.selectedEntity = towers[0];
+      this.showTowerInspectCard(towers[0].def, towers[0]);
+      return;
+    }
+
+    const title = document.getElementById('card-title');
+    const tag = document.getElementById('card-type-tag');
+    if (title) title.innerText = `Выбрано: ${towers.length} башен`;
+    if (tag) tag.innerText = `Группа`;
+
+    const details = document.getElementById('card-details');
+    const actions = document.getElementById('card-actions');
+    if (!details) return;
+
+    // Count tower types and calculate stats
+    const typeCounts = {};
+    let totalSellRefund = 0;
+    let totalUpgradeCostStandard = 0;
+    let totalUpgradeCostRacial = 0;
+    let standardUpgradableCount = 0;
+    let racialUpgradableCount = 0;
+
+    const charDef = (BALANCE.CHARACTERS || []).find(c => c.id === this.selectedCharacterId);
+
+    towers.forEach(t => {
+      typeCounts[t.def.name] = (typeCounts[t.def.name] || 0) + 1;
+      totalSellRefund += Math.round(t.def.cost * 0.75);
+
+      const nextStd = t.def.upgradeId ? BALANCE.TOWERS.find(x => x.id === t.def.upgradeId) : null;
+      const nextRacial = BALANCE.getRacialUpgrade(t.def, this.selectedCharacterId);
+      const cost = t.def.upgradeCost || 40;
+
+      if (nextStd && t.def.race === 'neutral') {
+        totalUpgradeCostStandard += cost;
+        standardUpgradableCount++;
+      }
+      if (nextRacial) {
+        totalUpgradeCostRacial += cost;
+        racialUpgradableCount++;
+      }
+    });
+
+    let breakdownHtml = Object.entries(typeCounts)
+      .map(([name, count]) => `<div class="stat-row"><span>${name}:</span><span class="stat-val-text">${count} шт.</span></div>`)
+      .join('');
+
+    details.innerHTML = `
+      ${breakdownHtml}
+      <hr style="border-color:#334155; margin: 6px 0;">
+      <div class="stat-row">
+        <span>Стоимость возврата:</span>
+        <span class="stat-val-text" style="color:#10b981; font-weight:700;">+🪙 ${totalSellRefund}</span>
+      </div>
+    `;
+
+    if (actions) {
+      actions.style.display = 'flex';
+      const upBtn = document.getElementById('btn-upgrade-tower');
+      const upRacialBtn = document.getElementById('btn-upgrade-racial');
+      const sellBtn = document.getElementById('btn-sell-tower');
+
+      if (upBtn) {
+        if (standardUpgradableCount > 0) {
+          upBtn.style.display = 'block';
+          upBtn.innerText = `Обычный (${standardUpgradableCount} шт. / 🪙 ${totalUpgradeCostStandard})`;
+          upBtn.onclick = () => {
+            this.upgradeMultipleTowers(towers, 'standard');
+          };
+          upBtn.onmouseenter = null;
+          upBtn.onmouseleave = null;
+        } else {
+          upBtn.style.display = 'none';
+          upBtn.onclick = null;
+        }
+      }
+
+      if (upRacialBtn) {
+        if (racialUpgradableCount > 0) {
+          upRacialBtn.style.display = 'block';
+          const badge = charDef ? charDef.badge : 'Расовый';
+          upRacialBtn.innerText = `${charDef ? charDef.icon : '✨'} ${badge} (${racialUpgradableCount} шт. / 🪙 ${totalUpgradeCostRacial})`;
+          upRacialBtn.onclick = () => {
+            this.upgradeMultipleTowers(towers, 'racial');
+          };
+          upRacialBtn.onmouseenter = null;
+          upRacialBtn.onmouseleave = null;
+        } else {
+          upRacialBtn.style.display = 'none';
+          upRacialBtn.onclick = null;
+        }
+      }
+
+      if (sellBtn) {
+        sellBtn.innerText = `Продать все (+🪙 ${totalSellRefund})`;
+        sellBtn.onclick = () => {
+          this.sellMultipleTowers(towers);
+        };
+      }
+    }
+  }
+
+  upgradeMultipleTowers(towers, type = 'standard') {
+    if (!towers || towers.length === 0) return;
+    let upgradedCount = 0;
+    let spentGold = 0;
+
+    for (const instance of [...towers]) {
+      const curDef = instance.def;
+      const nextDef = (type === 'racial')
+        ? BALANCE.getRacialUpgrade(curDef, this.selectedCharacterId)
+        : (curDef.race === 'neutral' && curDef.upgradeId ? BALANCE.TOWERS.find(t => t.id === curDef.upgradeId) : null);
+
+      if (!nextDef) continue;
+      const cost = curDef.upgradeCost || 40;
+
+      if (!this.isCreativeMode) {
+        if (this.player.gold < cost) {
+          this.logEvent(`⚠️ Недостаточно золота для всех улучшений (улучшено ${upgradedCount})!`, 'log-leak');
+          break;
+        }
+        this.player.gold -= cost;
+      }
+
+      instance.def = nextDef;
+      instance.level = (instance.level || 0) + 1;
+      spentGold += cost;
+      upgradedCount++;
+
+      if (this.isMultiplayer) {
+        this.sendServerCommand('UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: cost });
+      } else if (this.localCore) {
+        this.localCore.handleAction(this.myPlayerId || 'p1', 'UPGRADE_TOWER', { gx: instance.x, gy: instance.y, nextDefId: nextDef.id, cost: cost });
+      }
+    }
+
+    if (upgradedCount > 0) {
+      this.sound.build();
+      this.logEvent(`⬆️ Улучшено ${upgradedCount} башен (-🪙${spentGold})!`, 'log-income');
+      this.updateHUD();
+      this.showMultiTowerInspectCard(this.selectedTowers);
+    }
+  }
+
+  sellMultipleTowers(towers) {
+    if (!towers || towers.length === 0) return;
+    let totalRefund = 0;
+    const count = towers.length;
+
+    for (const instance of [...towers]) {
+      const refund = Math.round(instance.def.cost * 0.75);
+      totalRefund += refund;
+      this.player.gold += refund;
+
+      for (let dy = 0; dy < 2; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          if (this.player.grid[instance.y + dy]) {
+            this.player.grid[instance.y + dy][instance.x + dx] = null;
+          }
+        }
+      }
+
+      const idx = this.player.towers.indexOf(instance);
+      if (idx !== -1) this.player.towers.splice(idx, 1);
+
+      if (this.isMultiplayer) {
+        this.sendServerCommand('SELL_TOWER', { gx: instance.x, gy: instance.y });
+      } else if (this.localCore) {
+        this.localCore.handleAction(this.myPlayerId || 'p1', 'SELL_TOWER', { gx: instance.x, gy: instance.y });
+      }
+    }
+
+    this.recalculateCreepPaths(this.player);
+    this.selectedTowers = [];
+    this.selectedEntity = null;
+    this.sound.coin();
+    this.logEvent(`💰 Продано ${count} башен (+🪙${totalRefund})`, 'log-income');
+
+    const details = document.getElementById('card-details');
+    if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню или выберите постройку слева.</p>';
+    const actions = document.getElementById('card-actions');
+    if (actions) actions.style.display = 'none';
+    this.updateHUD();
   }
 
   updateHUD() {
@@ -2605,6 +2810,7 @@ class TowerWarsGame {
     const enemyData = snapshot.players && snapshot.players[enemyKey];
 
     if (myData) {
+      const oldTier = this.player.tier;
       this.player.gold = myData.gold;
       this.player.income = myData.income;
       this.player.lives = myData.lives;
@@ -2623,6 +2829,10 @@ class TowerWarsGame {
             stackTimer: s.stackTimer
           };
         });
+      }
+
+      if (oldTier !== myData.tier) {
+        this.renderCreepButtons();
       }
     }
 
@@ -3329,6 +3539,7 @@ class TowerWarsGame {
               if (placed) {
                 this.currentDrawStroke.push(placed);
                 this.selectedEntity = placed;
+                this.selectedTowers = [placed];
                 this.showTowerInspectCard(this.selectedTowerToBuild, placed);
               }
             } else {
@@ -3337,23 +3548,14 @@ class TowerWarsGame {
             }
           }
         } else {
-          // Check existing tower at 1x1 clicked cell
-          const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(mx / this.cellSize)));
-          const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(my / this.cellSize)));
-          const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
-
-          if (existingTower) {
-            this.selectedEntity = existingTower;
-            this.clearBuildSelection();
-            this.showTowerInspectCard(existingTower.def, existingTower);
-          } else {
-            this.selectedEntity = null;
-            this.previewUpgradeTower = null;
-            const details = document.getElementById('card-details');
-            if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
-            const actions = document.getElementById('card-actions');
-            if (actions) actions.style.display = 'none';
-          }
+          // Start Selection Marquee Box
+          this.selectionBox = {
+            isSelecting: true,
+            startX: mx,
+            startY: my,
+            currentX: mx,
+            currentY: my
+          };
         }
       }
     });
@@ -3388,10 +3590,76 @@ class TowerWarsGame {
           this.currentDrawStroke = [];
         }
       }
+
+      if (e.button === 0 && this.selectionBox && this.selectionBox.isSelecting) {
+        this.selectionBox.isSelecting = false;
+        const dragDist = Math.hypot(this.selectionBox.currentX - this.selectionBox.startX, this.selectionBox.currentY - this.selectionBox.startY);
+        const cs = this.cellSize;
+
+        if (dragDist > 8) {
+          // Box / Marquee selection
+          const x1 = Math.min(this.selectionBox.startX, this.selectionBox.currentX);
+          const y1 = Math.min(this.selectionBox.startY, this.selectionBox.currentY);
+          const x2 = Math.max(this.selectionBox.startX, this.selectionBox.currentX);
+          const y2 = Math.max(this.selectionBox.startY, this.selectionBox.currentY);
+
+          const matched = [];
+          for (const t of this.player.towers) {
+            const tx1 = t.x * cs;
+            const ty1 = t.y * cs;
+            const tx2 = (t.x + 2) * cs;
+            const ty2 = (t.y + 2) * cs;
+            if (tx1 < x2 && tx2 > x1 && ty1 < y2 && ty2 > y1) {
+              matched.push(t);
+            }
+          }
+
+          this.selectedTowers = matched;
+          if (matched.length === 1) {
+            this.selectedEntity = matched[0];
+            this.showTowerInspectCard(matched[0].def, matched[0]);
+          } else if (matched.length > 1) {
+            this.selectedEntity = null;
+            this.showMultiTowerInspectCard(matched);
+          } else {
+            this.selectedEntity = null;
+            this.previewUpgradeTower = null;
+            const details = document.getElementById('card-details');
+            if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
+            const actions = document.getElementById('card-actions');
+            if (actions) actions.style.display = 'none';
+          }
+        } else {
+          // Single Click selection
+          const rawGx = Math.max(0, Math.min(this.width - 1, Math.floor(this.selectionBox.startX / cs)));
+          const rawGy = Math.max(0, Math.min(this.height - 1, Math.floor(this.selectionBox.startY / cs)));
+          const existingTower = this.player.grid[rawGy] && this.player.grid[rawGy][rawGx];
+
+          if (existingTower) {
+            this.selectedTowers = [existingTower];
+            this.selectedEntity = existingTower;
+            this.showTowerInspectCard(existingTower.def, existingTower);
+          } else {
+            this.selectedTowers = [];
+            this.selectedEntity = null;
+            this.previewUpgradeTower = null;
+            const details = document.getElementById('card-details');
+            if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
+            const actions = document.getElementById('card-actions');
+            if (actions) actions.style.display = 'none';
+          }
+        }
+      }
     });
 
     this.canvas.addEventListener('mousemove', (e) => {
       const { mx, my } = this.getCanvasMousePos(e, true);
+
+      // Track marquee current position when selecting
+      if (this.selectionBox && this.selectionBox.isSelecting) {
+        this.selectionBox.currentX = mx;
+        this.selectionBox.currentY = my;
+      }
 
       // Center the 2x2 tower exactly under the mouse cursor crosshair
       this.mouseGridPos.x = Math.max(0, Math.min(this.width - 2, Math.round(mx / this.cellSize) - 1));
@@ -3421,6 +3689,7 @@ class TowerWarsGame {
               if (placed) {
                 this.currentDrawStroke.push(placed);
                 this.selectedEntity = placed;
+                this.selectedTowers = [placed];
                 this.showTowerInspectCard(this.selectedTowerToBuild, placed);
               }
             }
@@ -3498,6 +3767,14 @@ class TowerWarsGame {
 
       if (this.selectedTowerToBuild !== null) {
         this.clearBuildSelection();
+      } else if (this.selectedTowers && this.selectedTowers.length > 0) {
+        this.selectedTowers = [];
+        this.selectedEntity = null;
+        this.previewUpgradeTower = null;
+        const details = document.getElementById('card-details');
+        if (details) details.innerHTML = '<p class="placeholder-text">Нажмите на башню для просмотра характеристик или выберите постройку выше.</p>';
+        const actions = document.getElementById('card-actions');
+        if (actions) actions.style.display = 'none';
       } else if (this.selectedEntity !== null) {
         this.selectedEntity = null;
         this.previewUpgradeTower = null;
@@ -3512,8 +3789,14 @@ class TowerWarsGame {
     window.addEventListener('keydown', (e) => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
-      // 0. Delete / Del / Backspace: Sell selected tower or remove hovered tower / wall
+      // 0. Delete / Del / Backspace: Sell selected towers or hovered tower / wall
       if (e.key === 'Delete' || e.key === 'Del' || e.key === 'Backspace') {
+        if (this.selectedTowers && this.selectedTowers.length > 0) {
+          e.preventDefault();
+          this.sellMultipleTowers(this.selectedTowers);
+          return;
+        }
+
         if (this.selectedEntity) {
           e.preventDefault();
           this.sellSelectedTower(this.selectedEntity);
@@ -3590,6 +3873,7 @@ class TowerWarsGame {
           this.camera.y = 0;
         }
         this.clearBuildSelection();
+        this.selectedTowers = [];
         this.selectedEntity = null;
         this.previewUpgradeTower = null;
         const details = document.getElementById('card-details');
