@@ -97,8 +97,8 @@ class TowerWarsGame {
     this.selectedEntity = null;
     this.selectedTowers = [];
     this.selectionBox = { isSelecting: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
-    this.pendingCreepSends = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    this.pendingCreepTimestamps = [];
+    this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     this.previewUpgradeTower = null;
     this.hoverPreviewGuidePath = null;
     this.lastHoverGx = -1;
@@ -774,6 +774,10 @@ class TowerWarsGame {
   }
 
   initCreepSlots(agent) {
+    if (agent === this.player) {
+      this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
     const tierData = BALANCE.CREEPS_BY_TIER[agent.tier] || BALANCE.CREEPS_BY_TIER[1];
     agent.creepSlots = tierData.map((creepDef, idx) => ({
       index: idx,
@@ -1131,8 +1135,7 @@ class TowerWarsGame {
       this.player.gold -= slot.def.cost;
     }
     slot.charges = Math.max(0, slot.charges - 1);
-    this.pendingCreepSends[slotIndex] = (this.pendingCreepSends[slotIndex] || 0) + 1;
-    this.pendingCreepTimestamps.push({ slotIndex, time: Date.now() });
+    this.localSentCreepCounts[slotIndex] = (this.localSentCreepCounts[slotIndex] || 0) + 1;
 
     this.player.income += slot.def.income;
 
@@ -1238,6 +1241,7 @@ class TowerWarsGame {
     this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateFloatingTexts(dt);
+    this.updateCreepSlots(this.player, dt);
     this.updateCreepUIRealtime();
 
     const timerElem = document.getElementById('income-timer');
@@ -2830,8 +2834,8 @@ class TowerWarsGame {
       }
 
       case 'COMMAND_REJECTED': {
-        this.pendingCreepSends = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        this.pendingCreepTimestamps = [];
+        this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.logEvent(`⚠️ Действие отклонено сервером: ${data.reason}`, 'log-leak');
         break;
       }
@@ -2846,17 +2850,12 @@ class TowerWarsGame {
   handleServerSnapshot(snapshot) {
     if (!snapshot) return;
 
-    // Expire pending creep send predictions older than 1200ms
-    const now = Date.now();
-    this.pendingCreepTimestamps = (this.pendingCreepTimestamps || []).filter(item => {
-      if (now - item.time > 1200) {
-        if (this.pendingCreepSends[item.slotIndex]) {
-          this.pendingCreepSends[item.slotIndex] = Math.max(0, this.pendingCreepSends[item.slotIndex] - 1);
-        }
-        return false;
+    // 1. Process discrete server events FIRST so server confirmations update before slot mapping
+    if (snapshot.events && snapshot.events.length > 0) {
+      for (const ev of snapshot.events) {
+        this._processServerEvent(ev);
       }
-      return true;
-    });
+    }
 
     this.gameState = snapshot.gameState;
     this.prepTimer = snapshot.prepTimer;
@@ -2886,8 +2885,11 @@ class TowerWarsGame {
         this.player.creepSlots = myData.creepSlots.map(s => {
           const tierData = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
           const def = tierData[s.index] || tierData[0];
-          const pending = this.pendingCreepSends[s.index] || 0;
-          const predictedCharges = Math.max(0, s.charges - pending);
+          const localSent = this.localSentCreepCounts[s.index] || 0;
+          const serverConfirmed = this.serverConfirmedCreepCounts[s.index] || 0;
+          const inFlight = Math.max(0, localSent - serverConfirmed);
+          const predictedCharges = Math.max(0, s.charges - inFlight);
+
           return {
             index: s.index,
             def: def,
@@ -2899,6 +2901,8 @@ class TowerWarsGame {
       }
 
       if (oldTier !== myData.tier) {
+        this.localSentCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.serverConfirmedCreepCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         this.renderCreepButtons();
       }
     }
@@ -2918,13 +2922,6 @@ class TowerWarsGame {
     // Sync Creeps with Smooth Interpolation
     this._syncCreepsFromSnapshot(this.player, snapshot.creeps ? snapshot.creeps[myKey] : []);
     this._syncCreepsFromSnapshot(this.enemy, snapshot.creeps ? snapshot.creeps[enemyKey] : []);
-
-    // Process Events
-    if (snapshot.events && snapshot.events.length > 0) {
-      for (const ev of snapshot.events) {
-        this._processServerEvent(ev);
-      }
-    }
 
     // Check Game Over
     if (this.gameState === 'GAME_OVER' && !this.isGameOver) {
@@ -3143,8 +3140,11 @@ class TowerWarsGame {
         if (ev.senderId === this.myPlayerId) {
           const tierList = BALANCE.CREEPS_BY_TIER[this.player.tier] || BALANCE.CREEPS_BY_TIER[1];
           const slotIdx = (ev.slotIndex !== undefined) ? ev.slotIndex : tierList.findIndex(c => c.name === ev.creepName);
-          if (slotIdx !== -1 && this.pendingCreepSends[slotIdx]) {
-            this.pendingCreepSends[slotIdx] = Math.max(0, this.pendingCreepSends[slotIdx] - 1);
+          if (slotIdx !== -1) {
+            this.serverConfirmedCreepCounts[slotIdx] = (this.serverConfirmedCreepCounts[slotIdx] || 0) + 1;
+            if (this.serverConfirmedCreepCounts[slotIdx] > (this.localSentCreepCounts[slotIdx] || 0)) {
+              this.localSentCreepCounts[slotIdx] = this.serverConfirmedCreepCounts[slotIdx];
+            }
           }
           this.sound.coin();
           this.logEvent(`👾 Отправлен ${ev.creepName} (+${ev.income} инком)`, 'log-spawn');
